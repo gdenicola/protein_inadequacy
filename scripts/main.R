@@ -228,3 +228,35 @@ final_unmatched <- anti_join(gdd_keys, all_matches_final, by = c("iso3", "sex", 
 cat("✅ Total matched:", nrow(all_matches_final), "\n")
 cat("❌ Still unmatched after Step 4:", nrow(final_unmatched), "\n")
 
+all_matches_final <- all_matches_final %>%
+  mutate(source_final = coalesce(source, match_source)) %>%
+  select(-source, -match_source)  # Optionally drop old columns
+
+
+####NOW WE HAVE FULL MATCHING DICTIONARY#########
+
+# Merge GDD mean protein intakes with matched nutriR distribution shapes.
+# Each row represents a country–sex–age_group group from GDD, matched to a 
+# distribution from nutriR (via exact or 4-fold fallback logic) to allow reconstruction
+# of full intake distributions and downstream estimation of inadequacy.
+gdd_distributions <- all_matches_final %>%
+  left_join(protein_gdd_agg, by = c("iso3", "sex", "age_group")) %>%
+  left_join(protein_nutriR, 
+            by = c("match_iso3" = "iso3", "match_sex" = "sex", "match_age_group" = "age_group"))
+
+
+#now making distribution means
+gdd_distributions <- gdd_distributions %>%
+  mutate(
+    # Clean up the distribution label (e.g., " Gamma " → "gamma")
+    best_dist_clean = tolower(trimws(best_dist)),
+    
+    # Compute the theoretical mean of the matched distribution shape
+    shape_mean = case_when(
+      best_dist_clean == "log-normal" ~ exp(ln_meanlog + (ln_sdlog^2) / 2),
+      best_dist_clean == "gamma" ~ g_shape / g_rate,
+      TRUE ~ NA_real_  # Leave as NA if distribution is unrecognized
+    )
+  )
+
+
