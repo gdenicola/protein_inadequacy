@@ -244,19 +244,63 @@ gdd_distributions <- all_matches_final %>%
   left_join(protein_nutriR, 
             by = c("match_iso3" = "iso3", "match_sex" = "sex", "match_age_group" = "age_group"))
 
-
-#now making distribution means
-gdd_distributions <- gdd_distributions %>%
-  mutate(
-    # Clean up the distribution label (e.g., " Gamma " → "gamma")
-    best_dist_clean = tolower(trimws(best_dist)),
-    
-    # Compute the theoretical mean of the matched distribution shape
-    shape_mean = case_when(
-      best_dist_clean == "log-normal" ~ exp(ln_meanlog + (ln_sdlog^2) / 2),
-      best_dist_clean == "gamma" ~ g_shape / g_rate,
-      TRUE ~ NA_real_  # Leave as NA if distribution is unrecognized
-    )
+#create leaner version by keeping only needed variables
+#only keep variables needed to get full distributions
+gdd_distributions_lean <- gdd_distributions %>%
+  select(
+    iso3, sex, age_group,      # group identifiers
+    gdd_mean, gdd_lower, gdd_upper,  # mean intake and uncertainty
+    best_dist,                 # distribution type
+    cv                         # matched coefficient of variation
   )
 
+#we now have fully specified distributions for every subgroup!
 
+library(tibble)
+
+#official protein RDA values
+#source: https://nap.nationalacademies.org/read/10490/chapter/12#633
+
+protein_rda <- tibble::tibble(
+  age_range = c("0-0.5", "0.6-1", "1-3", "4-8", "9-13", "14-18", "19+"),
+  age_lower = c(0.0, 0.6, 1.0, 4.0, 9.0, 14.0, 19.0),
+  age_upper = c(0.5, 1.0, 3.0, 8.0, 13.0, 18.0, Inf),
+  rda_g_per_kg = c(1.52, 1.20, 1.05, 0.95, 0.95, 0.85, 0.80)
+)
+
+
+# Define GDD-style age groups
+gdd_age_bins <- tribble(
+  ~age_group, ~ages,
+  "0-4",      c(0.5, 2.5, 5.0),
+  "5-9",      c(5.0, 10.0),
+  "10-14",    c(10.0, 15.0),
+  "15-19",    c(15.0, 22.5),
+  "20-24",    c(22.5),
+  "25-29",    c(22.5),
+  "30-34",    c(45.0),
+  "35-39",    c(45.0),
+  "40-44",    c(45.0),
+  "45-49",    c(45.0),
+  "50-54",    c(45.0),
+  "55-59",    c(45.0),
+  "60-64",    c(65.0),
+  "65-69",    c(65.0),
+  "70-74",    c(65.0),
+  "75-79",    c(65.0),
+  "80-84",    c(65.0),
+  "85-89",    c(65.0),
+  "90-94",    c(65.0),
+  "95-99",    c(65.0)
+)
+
+# Compute weighted means by GDD age group
+protein_requirements_gdd <- gdd_age_bins %>%
+  rowwise() %>%
+  mutate(
+    male_mean = mean(who_protein_raw$male_mean[who_protein_raw$age %in% ages]),
+    male_sd   = mean(who_protein_raw$male_sd[who_protein_raw$age %in% ages]),
+    female_mean = mean(who_protein_raw$female_mean[who_protein_raw$age %in% ages]),
+    female_sd   = mean(who_protein_raw$female_sd[who_protein_raw$age %in% ages])
+  ) %>%
+  ungroup()
