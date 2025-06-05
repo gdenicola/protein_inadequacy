@@ -268,39 +268,3 @@ protein_rda <- tibble::tibble(
   rda_g_per_kg = c(1.52, 1.20, 1.05, 0.95, 0.95, 0.85, 0.80)
 )
 
-
-# Define GDD-style age groups
-gdd_age_bins <- tribble(
-  ~age_group, ~ages,
-  "0-4",      c(0.5, 2.5, 5.0),
-  "5-9",      c(5.0, 10.0),
-  "10-14",    c(10.0, 15.0),
-  "15-19",    c(15.0, 22.5),
-  "20-24",    c(22.5),
-  "25-29",    c(22.5),
-  "30-34",    c(45.0),
-  "35-39",    c(45.0),
-  "40-44",    c(45.0),
-  "45-49",    c(45.0),
-  "50-54",    c(45.0),
-  "55-59",    c(45.0),
-  "60-64",    c(65.0),
-  "65-69",    c(65.0),
-  "70-74",    c(65.0),
-  "75-79",    c(65.0),
-  "80-84",    c(65.0),
-  "85-89",    c(65.0),
-  "90-94",    c(65.0),
-  "95-99",    c(65.0)
-)
-
-# Compute weighted means by GDD age group
-protein_requirements_gdd <- gdd_age_bins %>%
-  rowwise() %>%
-  mutate(
-    male_mean = mean(who_protein_raw$male_mean[who_protein_raw$age %in% ages]),
-    male_sd   = mean(who_protein_raw$male_sd[who_protein_raw$age %in% ages]),
-    female_mean = mean(who_protein_raw$female_mean[who_protein_raw$age %in% ages]),
-    female_sd   = mean(who_protein_raw$female_sd[who_protein_raw$age %in% ages])
-  ) %>%
-  ungroup()
