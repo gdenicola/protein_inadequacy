@@ -1,4 +1,3 @@
-#IDEA to fix: triplicate the nutriR 0-4 classes to match all: 0-0.99, 1-1.99, 2-4
 
 # Load required packages
 library(dplyr)
@@ -333,7 +332,7 @@ gdd_distributions_agg <- gdd_distributions_lean %>%
 
 library(tibble)
 
-#official protein RDA values
+#official protein RDA and EAR values
 #source: https://nap.nationalacademies.org/read/10490/chapter/12#633
 
 protein_rda <- tibble::tibble(
@@ -341,6 +340,13 @@ protein_rda <- tibble::tibble(
   age_lower = c(0.0, 0.6, 1.0, 4.0, 9.0, 14.0, 19.0),
   age_upper = c(0.5, 1.0, 3.0, 8.0, 13.0, 18.0, Inf),
   rda_g_per_kg = c(1.52, 1.20, 1.05, 0.95, 0.95, 0.85, 0.80)
+)
+
+protein_ear <- tibble::tibble(
+  age_range = c("0-0.5", "0.6-0.99", "1-3", "4-8", "9-13", "14-18", "19+"),
+  age_lower = c(0.0, 0.6, 1.0, 4.0, 9.0, 14.0, 19.0),
+  age_upper = c(0.5, 1.0, 3.0, 8.0, 13.0, 18.0, Inf),
+  ear_g_per_kg = c(1.52, 1.00, 0.87, 0.76, 0.76, 0.72, 0.66)
 )
 
 #now the same RDS values, but converted to the GDD age groups 
@@ -358,6 +364,24 @@ protein_rda_gdd <- tibble::tibble(
     0.93,   # 10-14
     0.84,   # 15-19
     rep(0.80, 16) # 20+ (20-24 to 95-99)
+  )
+)
+
+#now the same EAR values, but converted to the GDD age groups 
+#through weighted averages:
+
+protein_ear_gdd <- tibble::tibble(
+  age_group = c("0-0.99", "1-4", "5-9", "10-14", "15-19",
+                "20-24", "25-29", "30-34", "35-39", "40-44", "45-49",
+                "50-54", "55-59", "60-64", "65-69", "70-74", "75-79",
+                "80-84", "85-89", "90-94", "95-99"),
+  ear_g_per_kg = c(
+    1.26,   # 0-0.99
+    0.8425,   # 1-4
+    0.76,   # 5-9
+    0.752,   # 10-14
+    0.706,   # 15-19
+    rep(0.66, 16) # 20+ (20-24 to 95-99)
   )
 )
 
@@ -568,8 +592,6 @@ gdd_data_with_weights <- gdd_data_with_weights %>%
 
 
 #ok, now let's match RDA data to obtain absolute RDA values (in grams):
-# Load dplyr if not already loaded
-library(dplyr)
 
 # Assume 'gdd_data_with_weights' and 'protein_rda_gdd' are in your environment.
 
@@ -577,23 +599,23 @@ library(dplyr)
 # (it should already, but a good check)
 # Expected: protein_rda_gdd has 'age_group' and 'rda_g_per_kg'
 
-# Merge the RDA per kg data with your main dataset
-gdd_data_with_abs_rda <- gdd_data_with_weights %>%
-  left_join(protein_rda_gdd, by = "age_group")
+# Merge the EAR per kg data with your main dataset
+gdd_data_with_abs_ear <- gdd_data_with_weights %>%
+  left_join(protein_ear_gdd, by = "age_group")
 
-# Calculate absolute RDA in g/day
-# We'll create rda_mean_g_day.
-# If you also have weight_low_kg and weight_high_kg and want RDA ranges,
-# you can calculate rda_low_g_day and rda_high_g_day similarly.
-gdd_data_with_abs_rda <- gdd_data_with_abs_rda %>%
+# Calculate absolute ear in g/day
+# We'll create ear_mean_g_day.
+# If you also have weight_low_kg and weight_high_kg and want ear ranges,
+# you can calculate ear_low_g_day and ear_high_g_day similarly.
+gdd_data_with_abs_ear <- gdd_data_with_abs_ear %>%
   mutate(
-    rda_mean_g_day = rda_g_per_kg * weight_mean_kg,
-    # Optional: Calculate RDA based on lower and upper body weights if available and desired
-    rda_low_g_day  = rda_g_per_kg * weight_low_kg,
-    rda_high_g_day = rda_g_per_kg * weight_high_kg
+    ear_mean_g_day = ear_g_per_kg * weight_mean_kg,
+    # Optional: Calculate ear based on lower and upper body weights if available and desired
+    ear_low_g_day  = ear_g_per_kg * weight_low_kg,
+    ear_high_g_day = ear_g_per_kg * weight_high_kg
   )
 
-#now,let's calculate the proportion below RDA:
+#now,let's calculate the proportion below ear:
 
 
 calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requirement) {
@@ -622,24 +644,24 @@ calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requ
 }
 
 # Apply this function row-wise
-gdd_inadequacy_estimates <- gdd_data_with_abs_rda %>%
+gdd_inadequacy_estimates <- gdd_data_with_abs_ear %>%
   rowwise() %>% # Process row by row
   mutate(
     prevalence_inadequate = calculate_inadequacy(
       gdd_mean,         # Corresponds to mean_intake
       cv,               # Corresponds to cv_intake
       best_dist,        # Corresponds to distribution_type
-      rda_mean_g_day    # Corresponds to requirement
+      ear_mean_g_day    # Corresponds to requirement
     )
   ) %>%
   ungroup() # Important to ungroup after rowwise operations
 
 # Display a few rows with the new prevalence_inadequate column
 # print(head(gdd_inadequacy_estimates %>%
-#              select(iso3, sex, age_group, gdd_mean, cv, best_dist, rda_mean_g_day, prevalence_inadequate)))
+#              select(iso3, sex, age_group, gdd_mean, cv, best_dist, ear_mean_g_day, prevalence_inadequate)))
 
 # (Optional) Check for NAs in the prevalence_inadequate column
-# NAs could arise if gdd_mean, cv, or rda_mean_g_day were NA, or if cv was 0 for gamma.
+# NAs could arise if gdd_mean, cv, or ear_mean_g_day were NA, or if cv was 0 for gamma.
 # cat("NAs in prevalence_inadequate:", sum(is.na(gdd_inadequacy_estimates$prevalence_inadequate)), "\n")
 
 # (Optional) Summary of prevalence estimates
@@ -650,9 +672,9 @@ gdd_inadequacy_estimates <- gdd_data_with_abs_rda %>%
 # Assume 'gdd_inadequacy_estimates' is your dataframe that already includes:
 # gdd_mean, gdd_lower, gdd_upper
 # weight_mean_kg, weight_low_kg, weight_high_kg
-# rda_g_per_kg
+# ear_g_per_kg
 # cv, best_dist
-# (It might not have rda_mean_g_day, rda_low_g_day, rda_high_g_day from the *previous* step,
+# (It might not have ear_mean_g_day, ear_low_g_day, ear_high_g_day from the *previous* step,
 # or if it does, we will recalculate them scenario-specifically)
 
 # We'll use the 'calculate_inadequacy' function from the previous step.
@@ -669,8 +691,8 @@ base_data_for_sensitivity <- gdd_inadequacy_estimates %>%
          gdd_L = gdd_lower, gdd_M = gdd_mean, gdd_U = gdd_upper,
          # Weight estimates
          wt_L = weight_low_kg, wt_M = weight_mean_kg, wt_H = weight_high_kg,
-         # RDA per kg (constant for an age_group)
-         rda_g_per_kg,
+         # ear per kg (constant for an age_group)
+         ear_g_per_kg,
          # Distribution shape (constant for a stratum in this sensitivity analysis)
          cv, best_dist,
          # Original prevalence if you want to compare
@@ -695,10 +717,10 @@ sensitivity_df_long <- base_data_for_sensitivity %>%
     scenario_label = paste0(gdd_level_char, wt_level_char) # e.g., "LM", "MH"
   )
 
-# Now calculate scenario-specific RDA and prevalence
+# Now calculate scenario-specific ear and prevalence
 sensitivity_results <- sensitivity_df_long %>%
   mutate(
-    scenario_rda_g_day = rda_g_per_kg * scenario_body_weight
+    scenario_ear_g_day = ear_g_per_kg * scenario_body_weight
   ) %>%
   rowwise() %>% # Important for calculate_inadequacy
   mutate(
@@ -706,7 +728,7 @@ sensitivity_results <- sensitivity_df_long %>%
       mean_intake = scenario_gdd_intake,
       cv_intake = cv,
       distribution_type = best_dist,
-      requirement = scenario_rda_g_day
+      requirement = scenario_ear_g_day
     )
   ) %>%
   ungroup()
@@ -714,7 +736,7 @@ sensitivity_results <- sensitivity_df_long %>%
 # You can view the results:
 # print(head(sensitivity_results %>%
 #              select(iso3, sex, age_group, scenario_label, scenario_gdd_intake, scenario_body_weight, 
-#                     scenario_rda_g_day, scenario_prevalence_inadequate)))
+#                     scenario_ear_g_day, scenario_prevalence_inadequate)))
 
 # To get a summary for each original stratum (iso3, sex, age_group),
 # you might want to find the min, mean, and max prevalence from these 9 scenarios.
@@ -754,3 +776,482 @@ pop2018_dt <- popAge1dt[year == 2018] #filter 2018 only
 #calculate total population that is protein deficient per each stratum 
 #(percentage*stratum population). the will also be able to calculate percentage
 #of global popilation that is protein deficient (using column totals)
+
+# Install countrycode if you haven't already
+#install.packages("countrycode")
+
+# Load necessary libraries
+#library(data.table)
+library(countrycode)
+# Install countrycode if you haven't already
+# install.packages("countrycode")
+
+
+# --- Add iso3 column using countrycode ---
+pop2018_dt[, iso3 := countrycode(sourcevar = country_code,
+                                 origin    = "un",
+                                 destination = "iso3c",
+                                 nomatch   = NA_character_)]
+
+# --- MANUAL FIX for Taiwan (UN M49 code 158) ---
+# Check if country_code 158 exists and its current iso3 is NA
+if (any(pop2018_dt$country_code == 158 & is.na(pop2018_dt$iso3))) {
+  pop2018_dt[country_code == 158, iso3 := "TWN"]
+  cat("Manually assigned iso3 = 'TWN' to country_code == 158 (Taiwan).\n")
+} else {
+  cat("Country_code 158 (Taiwan) not found or already had an iso3 mapping. Manual assignment skipped.\n")
+}
+
+# --- MANUAL FIX for Kosovo (UN M49 code 412) - Optional, if needed ---
+# Check your GDD data to see if you need "XKX" for Kosovo.
+# The UN M49 code for Kosovo under UNSCR 1244 is often 412.
+# If you need it and it's NA:
+ if (any(pop2018_dt$country_code == 412 & is.na(pop2018_dt$iso3))) {
+   pop2018_dt[country_code == 412, iso3 := "XKX"] # XKX is a user-assigned code for Kosovo
+   cat("Manually assigned iso3 = 'XKX' to country_code == 412 (Kosovo).\n")
+ }
+
+# --- Prepare the final dataset for your analysis (country-level) ---
+population_data_iso3 <- pop2018_dt[!is.na(iso3), .(
+  iso3,
+  original_country_name = name,
+  age,
+  pop_male = popM,
+  pop_female = popF
+)]
+
+
+
+###now, match population data with the gdd protein distributions
+
+cat("\n--- Processing Population Data (dplyr/tibble focus) ---\n")
+
+# Convert population_data_iso3 (data.table) to a tibble for dplyr operations
+population_data_iso3_tbl <- as_tibble(population_data_iso3)
+
+# --- Step 1 (Population): Reshape to long format using dplyr/tidyr ---
+population_long_tbl <- population_data_iso3_tbl %>%
+  pivot_longer(cols = c(pop_male, pop_female),
+               names_to = "sex_raw",
+               values_to = "population_thousands") %>%
+  mutate(sex = case_when(
+    sex_raw == "pop_male" ~ "Males",
+    sex_raw == "pop_female" ~ "Females",
+    TRUE ~ NA_character_
+  )) %>%
+  select(-sex_raw) # Remove the temporary sex_raw column
+
+# --- Step 2 (Population): Create GDD Age Bands using dplyr ---
+# Define your GDD age bands and their corresponding lower/upper single ages
+age_breaks_pop <- c(0, 1, 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 101) # Upper bound is exclusive in cut
+age_labels_pop <- c("0-0.99", "1-1.99", "2-4", "5-9", "10-14", "15-19",
+                    "20-24", "25-29", "30-34", "35-39", "40-44", "45-49",
+                    "50-54", "55-59", "60-64", "65-69", "70-74", "75-79",
+                    "80-84", "85-89", "90-94", "95-99")
+
+population_long_tbl <- population_long_tbl %>%
+  mutate(
+    age_group_gdd_temp = cut(age,
+                             breaks = age_breaks_pop,
+                             labels = age_labels_pop,
+                             right = FALSE,
+                             include.lowest = TRUE),
+    # Convert factor to character for re-labeling
+    age_group_gdd_temp = as.character(age_group_gdd_temp),
+    # Combine "1-1.99" and "2-4" into a "1-4" GDD target group
+    age_group = ifelse(age_group_gdd_temp %in% c("1-1.99", "2-4"), "1-4", age_group_gdd_temp)
+  ) %>%
+  select(-age_group_gdd_temp) # Remove temporary column
+
+# --- Step 3 (Population): Aggregate Population by iso3, sex, and GDD age_group ---
+population_aggregated_tbl <- population_long_tbl %>%
+  group_by(iso3, sex, age_group) %>%
+  summarise(population_total_thousands = sum(population_thousands, na.rm = TRUE),
+            .groups = "drop") # Summing populations
+
+# --- Step 4 (Population): Merge with your GDD inadequacy estimates ---
+# 'gdd_inadequacy_estimates_with_sensitivity' is your main GDD results tibble
+gdd_data_with_population <- gdd_inadequacy_estimates_with_sensitivity %>%
+  left_join(population_aggregated_tbl, by = c("iso3", "sex", "age_group"))
+
+# Convert population to absolute numbers and remove the thousands column using dplyr
+gdd_data_with_population <- gdd_data_with_population %>%
+  mutate(
+    population = population_total_thousands * 1000
+  ) %>%
+  select(-population_total_thousands)
+
+# Your gdd_data_with_population is now ready!
+
+
+####now, let's calculate percentages
+
+# Load dplyr if not already loaded
+library(dplyr)
+
+# Assume 'gdd_data_with_population' is your dataframe from the previous step.
+# It should contain:
+# - population (absolute number of people in the stratum)
+# - prevalence_inadequate (your central estimate using mean GDD, mean weight, EAR cut-point)
+#   OR prevalence_MM (if you named the central estimate from sensitivity analysis this way)
+# - min_prevalence_sensitivity
+# - max_prevalence_sensitivity
+
+# Make sure we have a consistent name for the central prevalence estimate.
+# If 'prevalence_MM' exists and is what you want as central, and 'prevalence_inadequate' might be different,
+# let's ensure we use 'prevalence_MM'.
+# Otherwise, if 'prevalence_inadequate' is your main central estimate, that's fine.
+# For this code, I'll assume 'prevalence_inadequate' is the primary central estimate
+# and 'prevalence_MM' might be identical or also present. If you prefer to use
+# 'prevalence_MM' explicitly as the central one, adjust the column name below.
+
+# If 'prevalence_MM' is the definitive central estimate from the sensitivity analysis,
+# and you want to ensure it's used:
+if ("prevalence_MM" %in% names(gdd_data_with_population) && 
+    !"prevalence_inadequate_central" %in% names(gdd_data_with_population)) {
+  gdd_data_with_population <- gdd_data_with_population %>%
+    rename(prevalence_inadequate_central = prevalence_MM)
+} else if ("prevalence_inadequate" %in% names(gdd_data_with_population) &&
+           !"prevalence_inadequate_central" %in% names(gdd_data_with_population)) {
+  gdd_data_with_population <- gdd_data_with_population %>%
+    rename(prevalence_inadequate_central = prevalence_inadequate)
+} else if (!"prevalence_inadequate_central" %in% names(gdd_data_with_population)){
+  stop("A central prevalence estimate column (e.g. 'prevalence_MM' or 'prevalence_inadequate') needs to be identified or renamed to 'prevalence_inadequate_central'.")
+}
+
+
+# --- Step 1: Calculate number of people with inadequate intake for each stratum ---
+gdd_counts_inadequate <- gdd_data_with_population %>%
+  mutate(
+    # Using the central estimate (Mean GDD, Mean Weight, EAR cut-point)
+    inadequate_count_central = prevalence_inadequate_central * population,
+    
+    # Using the minimum prevalence from sensitivity analysis
+    inadequate_count_min_sensitivity = min_prevalence_sensitivity * population,
+    
+    # Using the maximum prevalence from sensitivity analysis
+    inadequate_count_max_sensitivity = max_prevalence_sensitivity * population
+  )
+
+# Display a few rows with the new count columns
+# print(head(gdd_counts_inadequate %>%
+#              select(iso3, sex, age_group, population, prevalence_inadequate_central, inadequate_count_central,
+#                     min_prevalence_sensitivity, inadequate_count_min_sensitivity,
+#                     max_prevalence_sensitivity, inadequate_count_max_sensitivity)))
+
+
+# --- Step 2: Calculate Global Totals ---
+# Summing up population and inadequate counts across all strata
+
+global_summary <- gdd_counts_inadequate %>%
+  summarise(
+    total_population_global = sum(population, na.rm = TRUE),
+    
+    total_inadequate_central_global = sum(inadequate_count_central, na.rm = TRUE),
+    total_inadequate_min_sensitivity_global = sum(inadequate_count_min_sensitivity, na.rm = TRUE),
+    total_inadequate_max_sensitivity_global = sum(inadequate_count_max_sensitivity, na.rm = TRUE)
+  ) %>%
+  mutate(
+    # Calculate global percentage of inadequacy for each scenario
+    percent_inadequate_central_global = (total_inadequate_central_global / total_population_global),
+    percent_inadequate_min_sensitivity_global = (total_inadequate_min_sensitivity_global / total_population_global),
+    percent_inadequate_max_sensitivity_global = (total_inadequate_max_sensitivity_global / total_population_global)
+  )
+
+cat("\n--- Global Summary of Protein Inadequacy (EAR-based, 2018) ---\n")
+print(global_summary)
+
+# Nicer print format for percentages
+cat(sprintf("\nGlobal Total Population Analyzed: %.0f\n", global_summary$total_population_global))
+cat(sprintf("Central Estimate - Total Inadequate: %.0f (%.2f%% of global total)\n", 
+            global_summary$total_inadequate_central_global, 
+            global_summary$percent_inadequate_central_global * 100))
+cat(sprintf("Sensitivity Min - Total Inadequate: %.0f (%.2f%% of global total)\n", 
+            global_summary$total_inadequate_min_sensitivity_global, 
+            global_summary$percent_inadequate_min_sensitivity_global * 100))
+cat(sprintf("Sensitivity Max - Total Inadequate: %.0f (%.2f%% of global total)\n", 
+            global_summary$total_inadequate_max_sensitivity_global, 
+            global_summary$percent_inadequate_max_sensitivity_global * 100))
+
+###works til here
+##note: population world in 2018 was 7,729,902,781 according to worldometer
+temp_country_name_map_source <- as_tibble(pop2018_dt[!is.na(iso3)]) # Use the data.table that had iso3 added
+country_name_map <- temp_country_name_map_source %>%
+  distinct(iso3, original_country_name = name) # 'name' is the original UN country name
+
+
+# --- Now proceed with summary_by_country ---
+summary_by_country <- gdd_counts_inadequate %>%
+  group_by(iso3) %>%
+  summarise(
+    country_total_population = sum(population, na.rm = TRUE),
+    country_inadequate_central = sum(inadequate_count_central, na.rm = TRUE),
+    country_inadequate_min = sum(inadequate_count_min_sensitivity, na.rm = TRUE),
+    country_inadequate_max = sum(inadequate_count_max_sensitivity, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    country_percent_inadequate_central = ifelse(country_total_population > 0, country_inadequate_central / country_total_population, 0),
+    country_percent_inadequate_min = ifelse(country_total_population > 0, country_inadequate_min / country_total_population, 0),
+    country_percent_inadequate_max = ifelse(country_total_population > 0, country_inadequate_max / country_total_population, 0)
+  ) %>%
+  # Join with the prepared country name map
+  left_join(country_name_map, by = "iso3") %>%
+  # Reorder columns to have name next to iso3 if desired
+  select(iso3, original_country_name, everything()) %>% 
+  arrange(desc(country_percent_inadequate_central)) # Sort by highest central prevalence
+
+
+cat("\n--- Top 10 Countries by Central Estimate of Percent Inadequate ---\n")
+if ("original_country_name" %in% names(summary_by_country)) {
+  print(head(summary_by_country %>% 
+               select(iso3, original_country_name, country_total_population, 
+                      country_inadequate_central, country_percent_inadequate_central,
+                      country_percent_inadequate_min, country_percent_inadequate_max), 10))
+} else {
+  print(head(summary_by_country %>% 
+               select(iso3, country_total_population, 
+                      country_inadequate_central, country_percent_inadequate_central,
+                      country_percent_inadequate_min, country_percent_inadequate_max), 10))
+  cat("Note: 'original_country_name' was not found in summary_by_country for printing.\n")
+}
+
+
+# The rest of your code for summary_by_age_global should be fine
+# (Make sure age_group_levels_ordered is defined if you use age_group_f)
+age_group_levels_ordered <- c("0-0.99", "1-4", "5-9", "10-14", "15-19",
+                              "20-24", "25-29", "30-34", "35-39", "40-44", 
+                              "45-49", "50-54", "55-59", "60-64", "65-69", 
+                              "70-74", "75-79", "80-84", "85-89", "90-94", "95-99")
+
+summary_by_age_global <- gdd_counts_inadequate %>%
+  mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered)) %>% # Ensure factor is created
+  group_by(age_group_f) %>% 
+  summarise(
+    age_total_population = sum(population, na.rm = TRUE),
+    age_inadequate_central = sum(inadequate_count_central, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    age_percent_inadequate_central = ifelse(age_total_population > 0, age_inadequate_central / age_total_population, 0)
+  ) %>%
+  arrange(age_group_f)
+
+cat("\n--- Global Prevalence of Inadequacy by Age Group (Central Estimate) ---\n")
+print(n = 21, summary_by_age_global %>% select(age_group_f, age_total_population, age_inadequate_central, age_percent_inadequate_central))
+
+
+# --- (Your full script runs up to the point where 'gdd_counts_inadequate' is created) ---
+# gdd_counts_inadequate contains:
+# - iso3, sex, age_group
+# - population
+# - prevalence_inadequate_central (or your chosen central estimate column)
+# - min_prevalence_sensitivity, max_prevalence_sensitivity
+# - inadequate_count_central, inadequate_count_min_sensitivity, inadequate_count_max_sensitivity
+
+# --- Calculate Global Totals by Sex ---
+global_summary_by_sex <- gdd_counts_inadequate %>%
+  group_by(sex) %>% # Group by sex
+  summarise(
+    total_population_by_sex = sum(population, na.rm = TRUE),
+    
+    total_inadequate_central_by_sex = sum(inadequate_count_central, na.rm = TRUE),
+    total_inadequate_min_sensitivity_by_sex = sum(inadequate_count_min_sensitivity, na.rm = TRUE),
+    total_inadequate_max_sensitivity_by_sex = sum(inadequate_count_max_sensitivity, na.rm = TRUE),
+    .groups = "drop" # Ungroup after summarising
+  ) %>%
+  mutate(
+    # Calculate global percentage of inadequacy for each scenario, BY SEX
+    percent_inadequate_central_by_sex = ifelse(total_population_by_sex > 0, total_inadequate_central_by_sex / total_population_by_sex, 0),
+    percent_inadequate_min_sensitivity_by_sex = ifelse(total_population_by_sex > 0, total_inadequate_min_sensitivity_by_sex / total_population_by_sex, 0),
+    percent_inadequate_max_sensitivity_by_sex = ifelse(total_population_by_sex > 0, total_inadequate_max_sensitivity_by_sex / total_population_by_sex, 0)
+  )
+
+cat("\n\n--- Global Summary of Protein Inadequacy by Sex (EAR-based, 2018) ---\n")
+print(global_summary_by_sex)
+
+# Nicer print format for the by-sex summary
+cat("\n--- Formatted Global Summary by Sex ---\n")
+for (s_idx in 1:nrow(global_summary_by_sex)) {
+  sex_label <- global_summary_by_sex$sex[s_idx]
+  cat(sprintf("\nSex: %s\n", sex_label))
+  cat(sprintf("  Total Population Analyzed (%s): %.0f\n", sex_label, global_summary_by_sex$total_population_by_sex[s_idx]))
+  cat(sprintf("  Central Estimate - Total Inadequate (%s): %.0f (%.2f%% of %s total)\n", 
+              sex_label,
+              global_summary_by_sex$total_inadequate_central_by_sex[s_idx], 
+              global_summary_by_sex$percent_inadequate_central_by_sex[s_idx] * 100,
+              sex_label))
+  cat(sprintf("  Sensitivity Min - Total Inadequate (%s): %.0f (%.2f%% of %s total)\n", 
+              sex_label,
+              global_summary_by_sex$total_inadequate_min_sensitivity_by_sex[s_idx], 
+              global_summary_by_sex$percent_inadequate_min_sensitivity_by_sex[s_idx] * 100,
+              sex_label))
+  cat(sprintf("  Sensitivity Max - Total Inadequate (%s): %.0f (%.2f%% of %s total)\n", 
+              sex_label,
+              global_summary_by_sex$total_inadequate_max_sensitivity_by_sex[s_idx], 
+              global_summary_by_sex$percent_inadequate_max_sensitivity_by_sex[s_idx] * 100,
+              sex_label))
+}
+
+
+
+###############################################
+##########VISUALIZATIONS ONLY FROM HERE#########
+###############################################
+
+
+# Load ggplot2 if not already loaded
+library(ggplot2)
+library(dplyr) # For data manipulation for plotting
+library(scales) # For nice percentage labels
+
+# Data needed: global_summary tibble
+# --- Revised Plot 1: Global Prevalence of Inadequacy (Point with Error Bar) ---
+plot_global_prevalence_revised <- ggplot(global_summary, aes(x = "Global Estimate")) +
+  geom_point(aes(y = percent_inadequate_central_global), 
+             color = "dodgerblue3", size = 4, shape = 18) + # Diamond shape for point
+  geom_errorbar(aes(ymin = percent_inadequate_min_sensitivity_global, 
+                    ymax = percent_inadequate_max_sensitivity_global),
+                width = 0.1, linewidth = 0.8, color = "gray50") +
+  geom_text(aes(y = percent_inadequate_central_global, 
+                label = sprintf("%.1f%%", percent_inadequate_central_global * 100)),
+            vjust = -1.5, size = 4.5, color = "black", fontface = "bold") +
+  geom_text(aes(y = percent_inadequate_min_sensitivity_global, 
+                label = sprintf("%.1f%%\n(Min)", percent_inadequate_min_sensitivity_global * 100)),
+            vjust = 1.5, size = 3.5, color = "gray30", lineheight = 0.8) +
+  geom_text(aes(y = percent_inadequate_max_sensitivity_global, 
+                label = sprintf("%.1f%%\n(Max)", percent_inadequate_max_sensitivity_global * 100)),
+            vjust = -0.8, size = 3.5, color = "gray30", lineheight = 0.8) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), 
+                     limits = c(0, max(global_summary$percent_inadequate_max_sensitivity_global, na.rm = TRUE) * 1.1), # Dynamic upper limit
+                     expand = expansion(mult = c(0.05, 0.1))) + # Add a bit more space at top
+  labs(
+    title = "Global Prevalence of Inadequate Protein Intake (2018, EAR-based)",
+    subtitle = "Central estimate with range from sensitivity analysis (GDD & Weight low/high)",
+    x = "",
+    y = "Prevalence of Inadequacy"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(size=12, face="bold"), 
+        axis.ticks.x = element_blank(),
+        panel.grid.major.x = element_blank(), # Remove vertical grid line
+        panel.grid.minor.x = element_blank())
+
+print(plot_global_prevalence_revised)
+
+
+# --- Revised Plot 2: Global Prevalence by Sex (Points with Error Bars) ---
+plot_global_prevalence_sex_revised <- ggplot(global_summary_by_sex, 
+                                             aes(x = sex, y = percent_inadequate_central_by_sex, color = sex)) +
+  geom_point(size = 4, shape = 18, show.legend = FALSE) + # Diamond shape for points
+  geom_errorbar(aes(ymin = percent_inadequate_min_sensitivity_by_sex, 
+                    ymax = percent_inadequate_max_sensitivity_by_sex),
+                width = 0.15, linewidth = 0.8, show.legend = FALSE) + # Error bars will take color from aes(color=sex)
+  geom_text(aes(label = sprintf("%.1f%%", percent_inadequate_central_by_sex * 100)),
+            vjust = -1.8, size = 4, color = "black", fontface="bold", show.legend = FALSE) +
+  # Optional: Add text for min/max if not too cluttered
+  # geom_text(aes(y = percent_inadequate_min_sensitivity_by_sex, 
+  #               label = sprintf("%.1f%%", percent_inadequate_min_sensitivity_by_sex * 100)),
+  #           vjust = 1.5, size = 3, show.legend = FALSE) +
+  # geom_text(aes(y = percent_inadequate_max_sensitivity_by_sex, 
+  #               label = sprintf("%.1f%%", percent_inadequate_max_sensitivity_by_sex * 100)),
+  #           vjust = -0.5, size = 3, show.legend = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), 
+                     limits = c(0, max(global_summary_by_sex$percent_inadequate_max_sensitivity_by_sex, na.rm = TRUE) * 1.1),
+                     expand = expansion(mult = c(0.05, 0.1))) +
+  scale_color_brewer(palette = "Set1") + # Colors for points and error bars
+  labs(
+    title = "Global Prevalence of Inadequate Protein Intake by Sex (2018, EAR-based)",
+    subtitle = "Central estimate with range from sensitivity analysis",
+    x = "Sex",
+    y = "Prevalence of Inadequacy"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank())
+
+print(plot_global_prevalence_sex_revised)
+
+
+# --- Plot 3: Global Prevalence by Age Group (Line Plot with Uncertainty Band) ---
+# Data needed: gdd_counts_inadequate (to calculate min/max by age) and summary_by_age_global (for central line)
+
+# First, calculate min and max prevalence by age group globally
+summary_by_age_sensitivity_global <- gdd_counts_inadequate %>%
+  # Ensure age_group_f is created for proper ordering
+  mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered)) %>%
+  group_by(age_group_f) %>%
+  summarise(
+    total_population = sum(population, na.rm = TRUE),
+    total_inadequate_min = sum(inadequate_count_min_sensitivity, na.rm = TRUE),
+    total_inadequate_max = sum(inadequate_count_max_sensitivity, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    percent_inadequate_min = ifelse(total_population > 0, total_inadequate_min / total_population, 0),
+    percent_inadequate_max = ifelse(total_population > 0, total_inadequate_max / total_population, 0)
+  ) %>%
+  # Join with the central estimate from summary_by_age_global
+  left_join(summary_by_age_global %>% select(age_group_f, age_percent_inadequate_central), by = "age_group_f") %>%
+  filter(!is.na(age_group_f)) # Remove any NA age_group_f that might have appeared
+
+
+plot_age_prevalence_sensitivity <- ggplot(summary_by_age_sensitivity_global, aes(x = age_group_f)) +
+  geom_ribbon(aes(ymin = percent_inadequate_min, ymax = percent_inadequate_max, group = 1), 
+              fill = "skyblue", alpha = 0.3, linetype="dashed", color="grey70") +
+  geom_line(aes(y = age_percent_inadequate_central, group = 1), color = "dodgerblue3", linewidth = 1) +
+  geom_point(aes(y = age_percent_inadequate_central), color = "dodgerblue4", size = 2) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "Global Prevalence of Inadequate Protein Intake by Age Group (2018, EAR-based)",
+    subtitle = "Central estimate (line) with sensitivity range (shaded band)",
+    x = "Age Group",
+    y = "Prevalence of Inadequacy"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(plot_age_prevalence_sensitivity)
+
+# --- Plot 4: Number of People Affected (Stacked Bar Chart - Central Estimate) ---
+# We need broader age categories for a readable stacked bar.
+# Let's define them:
+broad_age_map <- tibble(
+  age_group = age_group_levels_ordered, # Your fine GDD age groups
+  broad_age_category = case_when(
+    age_group %in% c("0-0.99", "1-4") ~ "0-4 Years",
+    age_group %in% c("5-9", "10-14") ~ "5-14 Years",
+    age_group %in% c("15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49") ~ "15-49 Years",
+    age_group %in% c("50-54", "55-59", "60-64", "65-69") ~ "50-69 Years",
+    TRUE ~ "70+ Years" # All remaining older groups
+  )
+) %>% 
+  mutate(broad_age_category = factor(broad_age_category, 
+                                     levels = c("0-4 Years", "5-14 Years", "15-49 Years", "50-69 Years", "70+ Years")))
+
+
+# Join this map with gdd_counts_inadequate and sum up by broad_age_category and sex
+counts_by_broad_age_sex <- gdd_counts_inadequate %>%
+  left_join(broad_age_map, by = "age_group") %>%
+  filter(!is.na(broad_age_category)) %>% # Ensure all age groups mapped
+  group_by(broad_age_category, sex) %>%
+  summarise(
+    total_inadequate_central = sum(inadequate_count_central, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+plot_stacked_bar_counts <- ggplot(counts_by_broad_age_sex, 
+                                  aes(x = sex, y = total_inadequate_central, fill = broad_age_category)) +
+  geom_col(position = "stack", alpha = 0.8) +
+  scale_y_continuous(labels = scales::label_number(scale = 1e-6, suffix = " M")) + # Show in Millions
+  scale_fill_viridis_d(option = "plasma", name = "Age Category", direction = -1) +
+  labs(
+    title = "Global Number of People with Inadequate Protein Intake (Central Estimate)",
+    subtitle = "By Sex and Broad Age Category (2018, EAR-based)",
+    x = "Sex",
+    y = "Number of People with Inadequate Intake"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "top")
+
+print(plot_stacked_bar_counts)
