@@ -269,7 +269,6 @@ all_matches_final <- all_matches_final %>%
 
 ####NOW WE HAVE FULL MATCHING DICTIONARY#########
 ##########################################################################
-#####DO HERE TRIPLICATION OF NUTRIR AGE GROUPS TO ENSURE FULL MATCHING
 
 
 # Merge GDD mean protein intakes with matched nutriR distribution shapes.
@@ -731,8 +730,10 @@ sensitivity_results_all_scenarios <- sensitivity_df_long_all %>%
 # cat("\nNumber of rows in sensitivity_results_all_scenarios:", nrow(sensitivity_results_all_scenarios), "\n") # Should be GDD strata * 9
 # print(table(sensitivity_results_all_scenarios$scenario_label)) # Should show 9 scenarios, each with N rows
 
+#loading wpp2024 for population data
+library(wpp2024)
 
-# --- POPULATION DATA PROCESSING (this part of your script should be largely the same) ---
+# --- POPULATION DATA PROCESSING ---
 cat("\n5. Loading and preparing population data...\n")
 # Ensure popAge1dt is loaded if not already
 if (!exists("popAge1dt")) { data(popAge1dt) } 
