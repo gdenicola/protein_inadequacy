@@ -1,7 +1,6 @@
 # Load required packages
 library(dplyr)
 library(readr)
-library(nutriR)
 library(ggplot2)
 
 # Set working directory for your R script and clear the environment
@@ -10,326 +9,208 @@ setwd("..")
 options(scipen=999)
 rm(list = ls())
 
-# Step 1: Load nutriR fat and carbs distribution data
-protein_nutriR <- nutriR::get_dists(nutrients = "Protein")
-carbs_nutriR <- nutriR::get_dists(nutrients = "Carbohydrates")
-fats_nutriR <- nutriR::get_dists(nutrients = "Fat")
+# --- Step 1: Load GDD 2018 macronutrient data ---
+# I've used the file numbers from your code.
+protein_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v23_cnty.csv") # Protein (g/day)
+carbs_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v22_cnty.csv") # Carbs (% kcal)
+satfat_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v27_cnty.csv") # Sat Fat (% kcal)
+mufa_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v28_cnty.csv") # MUFA (% kcal)
+pufa_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v29_cnty.csv") # Omega-6 PUFA (% kcal)
+# Note: v30 (Seafood Omega-3) and v31 (Plant Omega-3) are in mg/day.
+# For this verification, their caloric contribution is negligible and would complicate the formula.
+# We will exclude them for clarity, as this check won't be affected.
 
-# Step 2: Load GDD 2018 macronutrient data
-protein_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v23_cnty.csv")
-carbs_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v22_cnty.csv")
-fat1 <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v27_cnty.csv")
-fat2 <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v28_cnty.csv")
-fat3 <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v29_cnty.csv")
-fat4 <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v30_cnty.csv")
-fat5 <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v31_cnty.csv")
 
-# Step 3: Preprocess and filter for 2018 data for all macronutrients
-protein_gdd_natl <- protein_gdd %>%
-  filter(year == 2018, edu == 999, urban == 999, age != 999, female != 999) %>%
-  mutate(sex = ifelse(female == 1, "Females", "Males")) %>%
-  select(iso3, sex, age, median, lowerci_95, upperci_95) # relevant protein columns
-
-carbs_gdd_natl <- carbs_gdd %>%
-  filter(year == 2018, edu == 999, urban == 999, age != 999, female != 999) %>%
-  mutate(sex = ifelse(female == 1, "Females", "Males")) %>%
-  select(iso3, sex, age, median, lowerci_95, upperci_95) # relevant carbs columns
-
-# Combine all fat datasets into one
-fat_gdd_natl <- bind_rows(
-  fat1 %>% filter(year == 2018, edu == 999, urban == 999, female != 999) %>%
+# --- Step 2: Create a function to clean and filter each dataset ---
+# This avoids repeating the same code block multiple times.
+preprocess_gdd_data <- function(df, value_col_name) {
+  df %>%
+    filter(year == 2018, edu == 999, urban == 999, age != 999, female != 999) %>%
     mutate(sex = ifelse(female == 1, "Females", "Males")) %>%
-    select(iso3, sex, age, median, lowerci_95, upperci_95),
-  
-  fat2 %>% filter(year == 2018, edu == 999, urban == 999, female != 999) %>%
-    mutate(sex = ifelse(female == 1, "Females", "Males")) %>%
-    select(iso3, sex, age, median, lowerci_95, upperci_95),
-  
-  fat3 %>% filter(year == 2018, edu == 999, urban == 999, female != 999) %>%
-    mutate(sex = ifelse(female == 1, "Females", "Males")) %>%
-    select(iso3, sex, age, median, lowerci_95, upperci_95),
-  
-  fat4 %>% filter(year == 2018, edu == 999, urban == 999, female != 999) %>%
-    mutate(sex = ifelse(female == 1, "Females", "Males")) %>%
-    select(iso3, sex, age, median, lowerci_95, upperci_95),
-  
-  fat5 %>% filter(year == 2018, edu == 999, urban == 999, female != 999) %>%
-    mutate(sex = ifelse(female == 1, "Females", "Males")) %>%
-    select(iso3, sex, age, median, lowerci_95, upperci_95)
-)
-
-# Step 4: Create age_group variable for all datasets
-create_age_group <- function(df) {
-  df %>% mutate(age_group = case_when(
-    age < 1 ~ "0-0.99",
-    age < 2 ~ "1-1.99",
-    age < 5 ~ "2-4",
-    age < 10 ~ "5-9",
-    age < 15 ~ "10-14",
-    age < 20 ~ "15-19",
-    age < 25 ~ "20-24",
-    age < 30 ~ "25-29",
-    age < 35 ~ "30-34",
-    age < 40 ~ "35-39",
-    age < 45 ~ "40-44",
-    age < 50 ~ "45-49",
-    age < 55 ~ "50-54",
-    age < 60 ~ "55-59",
-    age < 65 ~ "60-64",
-    age < 70 ~ "65-69",
-    age < 75 ~ "70-74",
-    age < 80 ~ "75-79",
-    age < 85 ~ "80-84",
-    age < 90 ~ "85-89",
-    age < 95 ~ "90-94",
-    age < 100 ~ "95-99",
-    TRUE ~ NA_character_
-  ))
+    select(iso3, sex, age, !!value_col_name := median) # Use !! and := to set column name
 }
 
-# Apply the create_age_group function
-protein_gdd_natl <- create_age_group(protein_gdd_natl)
-carbs_gdd_natl <- create_age_group(carbs_gdd_natl)
-fat_gdd_natl <- create_age_group(fat_gdd_natl)
+# Apply the function to each dataset
+protein_clean <- preprocess_gdd_data(protein_gdd, "protein_g_day")
+carbs_clean <- preprocess_gdd_data(carbs_gdd, "carbs_pct_kcal")
+satfat_clean <- preprocess_gdd_data(satfat_gdd, "satfat_pct_kcal")
+mufa_clean <- preprocess_gdd_data(mufa_gdd, "mufa_pct_kcal")
+pufa_clean <- preprocess_gdd_data(pufa_gdd, "pufa_pct_kcal")
 
-# Step 5: Aggregate means for all macronutrients by iso3, sex, and age_group
-agg_protein <- protein_gdd_natl %>%
-  group_by(iso3, sex, age_group) %>%
-  summarise(
-    gdd_mean_protein = mean(median, na.rm = TRUE),
-    gdd_lower_protein = mean(lowerci_95, na.rm = TRUE),
-    gdd_upper_protein = mean(upperci_95, na.rm = TRUE),
-    .groups = "drop"
-  )
 
-agg_carbs <- carbs_gdd_natl %>%
-  group_by(iso3, sex, age_group) %>%
-  summarise(
-    gdd_mean_carbs = mean(median, na.rm = TRUE),
-    gdd_lower_carbs = mean(lowerci_95, na.rm = TRUE),
-    gdd_upper_carbs = mean(upperci_95, na.rm = TRUE),
-    .groups = "drop"
-  )
+# --- Step 3: Join all data into a single master dataframe ---
+# This is the correct approach instead of separate aggregations.
+# We join by iso3, sex, and the original 'age' column.
+verification_df <- protein_clean %>%
+  left_join(carbs_clean, by = c("iso3", "sex", "age")) %>%
+  left_join(satfat_clean, by = c("iso3", "sex", "age")) %>%
+  left_join(mufa_clean, by = c("iso3", "sex", "age")) %>%
+  left_join(pufa_clean, by = c("iso3", "sex", "age")) %>%
+  # Remove rows where any of the essential values are missing
+  na.omit()
 
-agg_fats <- fat_gdd_natl %>%
-  group_by(iso3, sex, age_group) %>%
-  summarise(
-    gdd_mean_fats = mean(median, na.rm = TRUE),
-    gdd_lower_fats = mean(lowerci_95, na.rm = TRUE),
-    gdd_upper_fats = mean(upperci_95, na.rm = TRUE),
-    .groups = "drop"
-  )
 
-# Step 6: Merge aggregated means into one dataframe
-caloric_intake_agg <- agg_protein %>%
-  left_join(agg_carbs, by = c("iso3", "sex", "age_group")) %>%
-  left_join(agg_fats, by = c("iso3", "sex", "age_group"))
-
-# Step 7: Calculate Total Calories using Atwater factors
-caloric_intake_final <- caloric_intake_agg %>%
+# --- Step 4: Apply the CORRECT algebraic formula for verification ---
+verification_final <- verification_df %>%
   mutate(
-    total_calories_mean = (gdd_mean_protein * 4) + 
-      (gdd_mean_carbs * 4) + 
-      (gdd_mean_fats * 9), # Atwater factors
-    total_calories_lower = (gdd_lower_protein * 4) + 
-      (gdd_lower_carbs * 4) + 
-      (gdd_lower_fats * 9),
-    total_calories_upper = (gdd_upper_protein * 4) + 
-      (gdd_upper_carbs * 4) + 
-      (gdd_upper_fats * 9)
+    # First, sum the fat percentages to get the total fat contribution to energy
+    total_fat_pct_kcal = satfat_pct_kcal + mufa_pct_kcal + pufa_pct_kcal,
+    
+    # Now, apply the algebraic formula to solve for Total Kilocalories
+    # Total Energy = (Energy from Protein) / (1 - %Energy from Carbs - %Energy from Fat)
+    calculated_total_kcal = (protein_g_day * 4) / (1 - (carbs_pct_kcal / 100) - (total_fat_pct_kcal / 100))
   )
 
-# Step 8: Summary of Total Caloric Intake
-summary_caloric_intake <- caloric_intake_final %>%
-  summarise(
-    count = n(),
-    mean_calories = mean(total_calories_mean, na.rm = TRUE),
-    median_calories = median(total_calories_mean, na.rm = TRUE),
-    min_calories = min(total_calories_mean, na.rm = TRUE),
-    max_calories = max(total_calories_mean, na.rm = TRUE),
-    sd_calories = sd(total_calories_mean, na.rm = TRUE)
-  )
-
-# Print the summary of total caloric intake across all groups
-print(summary_caloric_intake)
-
-# Step 9: Visualize the total caloric intake distribution
-boxplot_caloric_intake <- ggplot(caloric_intake_final, aes(x = sex, y = total_calories_mean)) +
-  geom_boxplot() +
-  labs(title = "Distribution of Total Caloric Intake by Sex",
-       x = "Sex",
-       y = "Mean Total Calories (kcal/day)") +
-  theme_minimal()
-
-print(boxplot_caloric_intake)
-
-# Optional: Highlight some richest and poorest countries by total caloric intake
-richest_countries <- caloric_intake_final %>%
-  arrange(desc(total_calories_mean)) %>%
-  slice(1:10) # Top 10 richest based on total calories
-
-poorest_countries <- caloric_intake_final %>%
-  arrange(total_calories_mean) %>%
-  slice(1:10) # Bottom 10 poorest based on total calories
-
-cat("Richest Countries (Top 10 by Total Caloric Intake):\n")
-print(richest_countries)
-
-cat("\nPoorest Countries (Bottom 10 by Total Caloric Intake):\n")
-print(poorest_countries)
-
-
-# Define the countries to filter (as their ISO3 codes)
-#selected_countries <- c("USA", "ITA", "GRC", "AFG", "MDG", "ETH", "BWA", "LAO", "GBR")
-#selected_countries <- c("YEM", "SSD", "CAF", "TCD", "NER", "SDN", "AFG", "HTI", "BFA", "ETH")
-selected_countries <- c("BDI", "TLS", "NER", "MDG", "NPL", "USA", "GBR", "AUS", "WSM", "KIR")
-
-# Step to Filter the caloric intake data for the selected countries
-filtered_caloric_intake <- caloric_intake_final %>%
-  filter(iso3 %in% selected_countries)
-
-# Ensure the order of countries is based on `selected_countries`
-filtered_caloric_intake$iso3 <- factor(filtered_caloric_intake$iso3, levels = selected_countries)
-
-# Check the results for the specified countries
-print(filtered_caloric_intake)
-
-# (Optional) Summary statistics for the selected countries
-summary_filtered_caloric_intake <- filtered_caloric_intake %>%
-  summarise(
-    count = n(),
-    mean_calories = mean(total_calories_mean, na.rm = TRUE),
-    median_calories = median(total_calories_mean, na.rm = TRUE),
-    min_calories = min(total_calories_mean, na.rm = TRUE),
-    max_calories = max(total_calories_mean, na.rm = TRUE),
-    sd_calories = sd(total_calories_mean, na.rm = TRUE)
-  )
-
-# Print summary statistics
-print(summary_filtered_caloric_intake)
-
-# (Optional) Visualization for selected countries
-ggplot(filtered_caloric_intake, aes(x = iso3, y = total_calories_mean, fill = sex)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  labs(title = "Total Caloric Intake for Selected Countries",
-       x = "Country (ISO3)",
-       y = "Mean Total Calories (kcal/day)") +
-  theme_minimal() +
-  scale_x_discrete(limits = selected_countries) # Maintain the specified order in the x-axis
-
-library(tidyr)
-
-# Filter for Burundi and calculate mean total calories by sex and age group
-burundi_caloric_analysis_wide <- filtered_caloric_intake %>%
-  filter(iso3 == "USA") %>% # Filter for Burundi
-  group_by(age_group, sex) %>%
-  summarise(
-    average_calories = mean(total_calories_mean, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  pivot_wider(names_from = sex, values_from = average_calories, 
-              values_fill = list(average_calories = NA)) # Fill missing values with NAs
-
-# Print the wide version of the average caloric intake for Burundi
-View(burundi_caloric_analysis_wide)
-
-
-
-# Load required packages
-library(dplyr)
-library(readr)
-library(ggplot2)
-
-# Set working directory for your R script and clear the environment
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-setwd("..")
-options(scipen=999)
-rm(list = ls())
-
-# Step 1: Load GDD 2018 macronutrient protein data only
-protein_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v23_cnty.csv")
-
-# Step 2: Preprocess and filter for 2018 data for protein
-protein_gdd_natl <- protein_gdd %>%
-  filter(year == 2018, edu == 999, urban == 999, age != 999, female != 999) %>%
-  mutate(sex = ifelse(female == 1, "Females", "Males")) %>%
-  select(iso3, sex, age, median, lowerci_95, upperci_95) # relevant protein columns
-
-# Step 3: Create age_group variable for protein data
-create_age_group <- function(df) {
-  df %>% mutate(age_group = case_when(
+# Create the age_group variable for analysis AFTER the calculation
+verification_final <- verification_final %>%
+  mutate(age_group = case_when(
     age < 1 ~ "0-0.99",
-    age < 2 ~ "1-1.99",
-    age < 5 ~ "2-4",
-    age < 10 ~ "5-9",
-    age < 15 ~ "10-14",
-    age < 20 ~ "15-19",
-    age < 25 ~ "20-24",
-    age < 30 ~ "25-29",
-    age < 35 ~ "30-34",
-    age < 40 ~ "35-39",
-    age < 45 ~ "40-44",
-    age < 50 ~ "45-49",
-    age < 55 ~ "50-54",
-    age < 60 ~ "55-59",
-    age < 65 ~ "60-64",
-    age < 70 ~ "65-69",
-    age < 75 ~ "70-74",
-    age < 80 ~ "75-79",
-    age < 85 ~ "80-84",
-    age < 90 ~ "85-89",
-    age < 95 ~ "90-94",
-    age < 100 ~ "95-99",
+    age < 5 ~ "1-4", # Combining for simplicity in verification
+    age < 11 ~ "5-10",
+    age < 75 ~ "11-74",
+    age >= 75 ~ "75+",
     TRUE ~ NA_character_
   ))
-}
 
-# Apply the create_age_group function to protein data
-protein_gdd_natl <- create_age_group(protein_gdd_natl)
+# --- Step 5: Analyze the results ---
 
-# Step 4: Aggregate means for protein data by iso3, sex, and age_group
-agg_protein <- protein_gdd_natl %>%
-  group_by(iso3, sex, age_group) %>%
-  summarise(
-    gdd_mean_protein = mean(median, na.rm = TRUE),
-    gdd_lower_protein = mean(lowerci_95, na.rm = TRUE),
-    gdd_upper_protein = mean(upperci_95, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Define the countries to filter (as their ISO3 codes)
-selected_countries <- c("BDI", "TLS", "NER", "MDG", "NPL", "USA", "GBR", "AUS", "WSM", "KIR")
-
-# Step to Filter the protein intake data for the selected countries
-filtered_protein_intake <- agg_protein %>%
-  filter(iso3 %in% selected_countries)
-
-# Ensure the order of countries is based on `selected_countries`
-filtered_protein_intake$iso3 <- factor(filtered_protein_intake$iso3, levels = selected_countries)
-
-# Check the results for the specified countries
-print(filtered_protein_intake)
-
-# (Optional) Summary statistics for the selected countries
-summary_filtered_protein_intake <- filtered_protein_intake %>%
+# Get a summary of the calculated calories for the main adult group
+summary_adults <- verification_final %>%
+  filter(age_group == "11-74") %>%
   summarise(
     count = n(),
-    mean_protein = mean(gdd_mean_protein, na.rm = TRUE),
-    median_protein = median(gdd_mean_protein, na.rm = TRUE),
-    min_protein = min(gdd_mean_protein, na.rm = TRUE),
-    max_protein = max(gdd_mean_protein, na.rm = TRUE),
-    sd_protein = sd(gdd_mean_protein, na.rm = TRUE)
+    mean_calories = mean(calculated_total_kcal, na.rm = TRUE),
+    median_calories = median(calculated_total_kcal, na.rm = TRUE),
+    min_calories = min(calculated_total_kcal, na.rm = TRUE),
+    max_calories = max(calculated_total_kcal, na.rm = TRUE),
+    sd_calories = sd(calculated_total_kcal, na.rm = TRUE)
   )
 
-# Print summary statistics for protein intake
-print(summary_filtered_protein_intake)
+cat("--- Verification Summary for Adult Group (Expected: 2000 kcal) ---\n")
+print(summary_adults)
 
-# (Optional) Visualization for selected countries
-ggplot(filtered_protein_intake, aes(x = iso3, y = gdd_mean_protein, fill = sex)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  labs(title = "Average Protein Intake for Selected Countries",
-       x = "Country (ISO3)",
-       y = "Mean Protein Intake (g/day)") +
+# Get a summary for the oldest group
+summary_seniors <- verification_final %>%
+  filter(age_group == "75+") %>%
+  summarise(
+    count = n(),
+    mean_calories = mean(calculated_total_kcal, na.rm = TRUE),
+    median_calories = median(calculated_total_kcal, na.rm = TRUE),
+    min_calories = min(calculated_total_kcal, na.rm = TRUE),
+    max_calories = max(calculated_total_kcal, na.rm = TRUE),
+    sd_calories = sd(calculated_total_kcal, na.rm = TRUE)
+  )
+
+cat("\n--- Verification Summary for Senior Group (Expected: 1700 kcal) ---\n")
+print(summary_seniors)
+
+
+# --- Step 6: Visualize the distribution to confirm ---
+ggplot(verification_final %>% filter(age_group == "11-74"), aes(x = calculated_total_kcal)) +
+  geom_histogram(binwidth = 30, fill = "dodgerblue", color = "black", alpha = 0.8) +
+  geom_vline(xintercept = 2000, color = "red", linetype = "dashed", size = 1.5) +
+  labs(
+    title = "Distribution of Calculated Calories for Ages 11-74",
+    subtitle = "If standardized, values should cluster tightly around the red line (2000 kcal)",
+    x = "Calculated Total Calories (kcal)",
+    y = "Count of Country-Sex-Age Strata"
+  ) +
   theme_minimal() +
-  scale_x_discrete(limits = selected_countries) # Maintain the specified order in the x-axis
+  # Zoom in on the area of interest to see the distribution clearly
+  coord_cartesian(xlim = c(0, 5000))
+
+# --- Step 7: Filter for Plausible Values and Rank Countries ---
+
+# First, let's filter the verification_final dataframe to include only
+# values that are biologically plausible. We'll choose a generous range.
+# A value below 500 or above 5000 for a stratum average is highly suspect.
+plausible_calories_df <- verification_final %>%
+  filter(calculated_total_kcal > 500 & calculated_total_kcal < 5000)
+
+# Now, let's aggregate to the country level by taking the mean of these plausible values
+country_level_summary <- plausible_calories_df %>%
+  group_by(iso3) %>%
+  summarise(
+    avg_calculated_kcal = mean(calculated_total_kcal, na.rm = TRUE),
+    n_strata = n() # Count how many valid strata we have for each country
+  ) %>%
+  ungroup()
+
+# --- Find the 10 Countries with the HIGHEST Average Calculated Calories ---
+highest_cal_countries <- country_level_summary %>%
+  arrange(desc(avg_calculated_kcal)) %>%
+  head(10)
+
+cat("\n--- Countries with HIGHEST Average Calculated Calories (within plausible range) ---\n")
+print(highest_cal_countries)
+
+
+# --- Find the 10 Countries with the LOWEST Average Calculated Calories ---
+lowest_cal_countries <- country_level_summary %>%
+  arrange(avg_calculated_kcal) %>%
+  head(10)
+
+cat("\n--- Countries with LOWEST Average Calculated Calories (within plausible range) ---\n")
+print(lowest_cal_countries)
+
+
+artifact_counts <- verification_final %>%
+  summarise(
+    total_strata = n(),
+    count_negative = sum(calculated_total_kcal < 0, na.rm = TRUE),
+    count_over_5k = sum(calculated_total_kcal > 5000, na.rm = TRUE)
+  ) %>%
+  mutate(
+    total_artifact_count = count_negative + count_over_5k,
+    percent_artifact = (total_artifact_count / total_strata) * 100
+  )
+
+cat("\n--- Counts of Impossible 'Artifact' Calorie Values ---\n")
+print(artifact_counts)
+
+
+# --- Step 9: Inspect the Strata with Impossible 'Artifact' Values ---
+
+# We continue using the `verification_final` dataframe.
+
+# Create a dataframe for all strata that resulted in NEGATIVE calories
+negative_calorie_strata <- verification_final %>%
+  filter(calculated_total_kcal < 0) %>%
+  # Select key columns for easy inspection and sort by the most extreme values
+  select(iso3, sex, age, age_group, protein_g_day, carbs_pct_kcal, total_fat_pct_kcal, calculated_total_kcal) %>%
+  arrange(calculated_total_kcal) # Sort to see the most negative values first
+
+cat("\n\n--- Strata with NEGATIVE Calculated Calories (Most Extreme First) ---\n")
+print(head(negative_calorie_strata, 20)) # Print the top 20 most extreme negative cases
+
+
+# Create a dataframe for all strata that resulted in EXTREMELY HIGH calories
+high_calorie_strata <- verification_final %>%
+  filter(calculated_total_kcal > 5000) %>%
+  # Select the same key columns for easy inspection
+  select(iso3, sex, age, age_group, protein_g_day, carbs_pct_kcal, total_fat_pct_kcal, calculated_total_kcal) %>%
+  arrange(desc(calculated_total_kcal)) # Sort to see the highest values first
+
+cat("\n\n--- Strata with EXTREMELY HIGH (>5000) Calculated Calories (Most Extreme First) ---\n")
+print(head(high_calorie_strata, 20)) # Print the top 20 most extreme high cases
+
+# --- Optional but helpful: Summarize by country ---
+# Let's count how many artifact strata each country has.
+
+negative_counts_by_country <- negative_calorie_strata %>%
+  group_by(iso3) %>%
+  summarise(n_negative = n()) %>%
+  arrange(desc(n_negative))
+
+cat("\n\n--- Countries with the MOST Strata Resulting in Negative Calories ---\n")
+print(head(negative_counts_by_country, 15))
+
+
+high_counts_by_country <- high_calorie_strata %>%
+  group_by(iso3) %>%
+  summarise(n_high = n()) %>%
+  arrange(desc(n_high))
+
+cat("\n\n--- Countries with the MOST Strata Resulting in High (>5000) Calories ---\n")
+print(head(high_counts_by_country, 15))
 

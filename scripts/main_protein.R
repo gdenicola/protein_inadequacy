@@ -732,6 +732,7 @@ sensitivity_results_all_scenarios <- sensitivity_df_long_all %>%
 
 #loading wpp2024 for population data
 library(wpp2024)
+library(countrycode)
 
 # --- POPULATION DATA PROCESSING ---
 cat("\n5. Loading and preparing population data...\n")
@@ -994,3 +995,12 @@ plot_stacked_bar_counts_MM <- ggplot(counts_by_broad_age_sex_MM,
   theme_minimal(base_size = 14) +
   theme(legend.position = "top")
 print(plot_stacked_bar_counts_MM)
+
+
+
+# SAVE THE PRE-PROCESSED DATA BEFORE "FLAWED" INADEQUACY CALCULATION
+# This object contains standardized GDD intakes, matched CVs, body weights, and absolute EARs.
+# It is the perfect starting point for the new script.
+saveRDS(gdd_data_with_abs_ear, file = "./output/gdd_prepped_data_for_caloric_adjustment.rds") 
+# SAVE THE AGGREGATED POPULATION DATA
+saveRDS(population_aggregated_tbl, file = "./output/wpp2024_population_aggregated_2018.rds")
