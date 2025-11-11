@@ -33,7 +33,7 @@ population_data <- readRDS("./output/wpp2024_population_aggregated_2018.rds")
 # doi: 10.1016/S2542-5196(21)00352-1. 
 
 # GDD's caloric standardization values
-gdd_kcal_standards <- tibble::tribble(
+gdd_kcal_standards_old <- tibble::tribble(
   ~age_group, ~standard_kcal,
   "0-0.99",      700,
   "1-4",        1300, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
@@ -59,13 +59,41 @@ gdd_kcal_standards <- tibble::tribble(
   "95-99",      1700
 )
 
+
+
+# GDD's caloric standardization values
+gdd_kcal_standards <- tibble::tribble(
+  ~age_group, ~standard_kcal,
+  "0-0.99",     700,
+  "1-4",        1300, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
+  # A simple weighted average is fine: (1*1000 + 3*1300)/4 = 1225. Let's use that.
+  "5-9",        1700,
+  "10-14",      2000,
+  "15-19",      2000,
+  "20-24",      2000,
+  "25-29",      2000,
+  "30-34",      2000,
+  "35-39",      2000,
+  "40-44",      2000,
+  "45-49",      2000,
+  "50-54",      2000,
+  "55-59",      2000,
+  "60-64",      2000,
+  "65-69",      2000,
+  "70-74",      2000,
+  "75-79",      2000,
+  "80-84",      2000,
+  "85-89",      2000,
+  "90-94",      2000,
+  "95-99",      2000
+)
 #question: is it really not sex dependent? seems strange
 
 # Correcting the 1-4 group based on the components:
 # GDD: 1–<2 years = 1000 kcal; 2–5 years = 1300 kcal.
 # Your 1-4 group is a 1-year band and a 3-year band.
 # Weighted avg: (1 * 1000 + 3 * 1300) / 4 = 1225 kcal.
-gdd_kcal_standards$standard_kcal[gdd_kcal_standards$age_group == "1-4"] <- 1225
+#gdd_kcal_standards$standard_kcal[gdd_kcal_standards$age_group == "1-4"] <- 1225
 
 
 # Join with standardization values and calculate protein's share of calories
@@ -88,12 +116,16 @@ prepped_data %>%
 
 
 # --------------------------------------------------------------------------
-# NEW STRATEGY: Using the Our World in Data (OWID) Caloric Supply File
+# Using the Our World in Data (OWID) Caloric Supply File
 # --------------------------------------------------------------------------
 
 # --- Step 1: Load the OWID data file ---
 owid_raw <- read_csv("./data/OWID_daily-per-capita-caloric-supply.csv", show_col_types = FALSE)
 #from https://ourworldindata.org/grapher/daily-per-capita-caloric-supply
+owid_protein_raw <- read_csv("./data/OWID_daily-per-capita-protein-supply.csv", show_col_types = FALSE)
+#from https://ourworldindata.org/grapher/daily-per-capita-protein-supply
+glimpse(owid_protein_raw)
+
 
 # --- Step 2: Filter and clean the OWID data ---
 # Based on the glimpse, the column names are simple and direct.
@@ -125,25 +157,6 @@ if (nrow(missing_from_owid) > 0) {
   cat("\n✅✅✅ SUCCESS! All countries in your main dataset were successfully found in the OWID data.\n")
 }
 
-# Explicitly check for Japan to be sure
-japan_owid_check <- owid_calories %>% filter(iso3 == "JPN")
-
-cat("\n--- Checking for Japan in OWID data ---\n")
-if (nrow(japan_owid_check) > 0) {
-  cat("✅ Found Japan in the OWID data!\n")
-  print(japan_owid_check)
-} else {
-  cat("❌ Japan is STILL missing, even from OWID.\n")
-}
-
-
-# --- Step 4: Final Inspection of the Cleaned OWID Data ---
-cat("\n--- Final, Cleaned OWID Caloric Supply Data (2018) ---\n")
-print(head(owid_calories))
-summary(owid_calories$fao_des_kcal)
-
-# From now on, we will use 'owid_calories' as our source for national caloric supply.
-
 # --------------------------------------------------------------------------
 # FINAL STEP: Targeted Imputation for the 12 Remaining Countries
 # --------------------------------------------------------------------------
@@ -168,13 +181,6 @@ imputation_map_final <- tibble::tribble(
   "MHL", "FJI",       "Regional peer (Pacific)"
 )
 
-# A special check for South Sudan's proxy. If Sudan (SDN) is now in our data, use it. Otherwise, fall back to Ethiopia.
-if ("SDN" %in% owid_calories$iso3) {
-  imputation_map_final$proxy_iso3[imputation_map_final$iso3 == "SSD"] <- "SDN"
-} else {
-  imputation_map_final$proxy_iso3[imputation_map_final$iso3 == "SSD"] <- "ETH"
-}
-
 # Step 2: Get the caloric values for the proxy countries from our clean OWID data
 imputation_values <- owid_calories %>%
   filter(iso3 %in% imputation_map_final$proxy_iso3) %>%
@@ -187,24 +193,9 @@ imputation_table_final <- imputation_map_final %>%
   filter(iso3 %in% missing_from_owid$iso3) %>%
   select(iso3, fao_des_kcal) # We only need these two columns to bind
 
-cat("\n--- Final Imputation Table (for the 12 missing countries) ---\n")
-print(imputation_table_final)
-
 # Step 4: Bind the imputed rows to the main OWID data to create the complete dataset
 calories_final_complete <- bind_rows(owid_calories, imputation_table_final)
 
-# --- FINAL VALIDATION (This MUST pass) ---
-missing_last_check <- prepped_data %>%
-  distinct(iso3) %>%
-  anti_join(calories_final_complete, by = "iso3")
-
-cat("\n--- Final Check After Imputation ---\n")
-if (nrow(missing_last_check) > 0) {
-  cat("❌ The following", nrow(missing_last_check), "countries are STILL missing somehow:\n")
-  print(missing_last_check$iso3)
-} else {
-  cat("✅✅✅ COMPLETE SUCCESS! All", nrow(prepped_data %>% distinct(iso3)), "countries now have a caloric supply value.\n")
-}
 
 # We will now use 'calories_final_complete' as our definitive source.
 cat("\n--- Final Complete Caloric Supply Data (Head) ---\n")
@@ -275,8 +266,6 @@ eer_table <- tibble::tribble(
   "95-99",    "Males",   1800, "95-99",    "Females", 1550
 )
 
-# You can now proceed with the rest of the analysis using this 'eer_table' object.
-
 # --------------------------------------------------------------------------
 # PART 3, STEP 2: Create the Master Analytical Data Frame
 # --------------------------------------------------------------------------
@@ -293,37 +282,6 @@ master_data <- prepped_data %>%
   left_join(calories_final_complete, by = "iso3") %>%
   # Join stratum-specific energy requirements (EER)
   left_join(eer_table, by = c("sex", "age_group"))
-
-# --- CHECKPOINT 1: Inspect the Master Data Frame ---
-# This check is crucial to ensure that the joins worked as expected and did not
-# introduce unexpected missing values. We expect zero NAs in the newly joined columns.
-
-cat("\n--- CHECKPOINT 1: Validating the joined master_data ---\n")
-
-# Summarize NA counts for the newly added columns
-na_check <- master_data %>%
-  summarise(
-    NAs_in_population = sum(is.na(population)),
-    NAs_in_calories = sum(is.na(fao_des_kcal)),
-    NAs_in_eer = sum(is.na(eer_kcal))
-  )
-
-# Print the validation results
-if (all(na_check == 0)) {
-  cat("✅ SUCCESS: All joins were successful. No missing values introduced.\n")
-} else {
-  cat("⚠️ WARNING: Joins introduced NA values. Please inspect the summary below.\n")
-}
-print(na_check)
-
-# As a robust measure, we will filter out any rows that might have NAs,
-# although we do not expect any at this point.
-master_data <- master_data %>%
-  filter(!is.na(population), !is.na(fao_des_kcal), !is.na(eer_kcal))
-
-# Let's glimpse the final structure of our "big table"
-cat("\n--- Structure of the final master_data frame ---\n")
-glimpse(master_data)
 
 
 # --------------------------------------------------------------------------
@@ -352,183 +310,240 @@ disaggregated_data <- master_data %>%
     disagg_kcal_supply = fao_des_kcal * adjustment_factor
   )
 
-# --- CHECKPOINT 2: Validate the Disaggregation Math ---
-# This check ensures our disaggregation logic is sound. We will average the
-# new stratum-specific values back up and confirm it equals the original national value.
-cat("\n--- CHECKPOINT 2: Validating the disaggregation for one country (e.g., USA) ---\n")
+# the disaggregation was here made by using the EER table inputted above with population
+# by stratum as weights, such that the sum of all still equals the same as by
+# multiplying the countrywide average by the country population, thus preserving
+# total claoric supply.
 
-validation_check <- disaggregated_data %>%
-  filter(iso3 == "USA") %>% # Pick any large, diverse country
-  summarise(
-    original_supply = first(fao_des_kcal),
-    recalculated_average_supply = weighted.mean(disagg_kcal_supply, w = population, na.rm = TRUE)
-  ) %>%
-  mutate(difference = original_supply - recalculated_average_supply)
+# --------------------------------------------------------------------------
+# --- Step 3b (REVISED & RENAMED): Calculate "True" Protein Intake for all 9 Scenarios ---
+# --------------------------------------------------------------------------
+# This block calculates the de-standardized protein intake (in grams/day) for
+# all 9 combinations of consumption scenarios (Low/Med/High waste) and
+# dietary composition scenarios (Low/Med/High protein share).
 
-print(validation_check)
-# We expect the 'difference' to be a very small number (e.g., 1e-12), proving our math is correct.
-
-
-# --- Step 3b: Create Consumption Scenarios & Calculate "True" Protein Intake ---
-# Finally, we apply waste scenarios and calculate the final protein grams.
 final_data <- disaggregated_data %>%
   mutate(
-    # --- Consumption Scenarios (adjusting for waste) ---
-    # High Scenario: Assumes 0% waste (Consumption = Supply)
-    est_kcal_consumed_high = disagg_kcal_supply * 1.00,
-    # Mean Scenario: Assumes 15% waste
-    est_kcal_consumed_mean = disagg_kcal_supply * 0.85,
-    # Low Scenario: Assumes 30% waste
-    est_kcal_consumed_low  = disagg_kcal_supply * 0.70,
+    # --- First, create the 3 caloric consumption scenarios (adjusting for waste) ---
+    est_kcal_consumed_high = disagg_kcal_supply * 0.90, # 10% waste
+    est_kcal_consumed_med  = disagg_kcal_supply * 0.75, # 25% waste (Median/Central)
+    est_kcal_consumed_low  = disagg_kcal_supply * 0.60, # 40% waste
     
-    # --- "True" Protein Intake in Grams/Day ---
-    # This combines the consumption scenarios with the protein share blueprints.
-    # Central estimate (Mean consumption, Mean protein share)
-    true_protein_g_mean = (est_kcal_consumed_mean * protein_kcal_share_mean) / 4,
+    # --- Now, calculate all 9 protein intake scenarios (in grams/day) ---
+    # Using the clearer "low, med, high" naming convention.
     
-    # Low estimate for sensitivity (Low consumption, Low protein share)
-    true_protein_g_low = (est_kcal_consumed_low * protein_kcal_share_lower) / 4,
+    # Central Estimate (Median Consumption x Median Protein Share)
+    protein_g_med_med = (est_kcal_consumed_med * protein_kcal_share_mean) / 4, # Note: protein_kcal_share_mean is our "median" share
     
-    # High estimate for sensitivity (High consumption, High protein share)
-    true_protein_g_high = (est_kcal_consumed_high * protein_kcal_share_upper) / 4
+    # Sensitivity Scenarios
+    protein_g_low_low   = (est_kcal_consumed_low  * protein_kcal_share_lower) / 4,
+    protein_g_low_med   = (est_kcal_consumed_low  * protein_kcal_share_mean)  / 4,
+    protein_g_low_high  = (est_kcal_consumed_low  * protein_kcal_share_upper) / 4,
+    
+    protein_g_med_low   = (est_kcal_consumed_med  * protein_kcal_share_lower) / 4,
+    # protein_g_med_med is already defined above
+    protein_g_med_high  = (est_kcal_consumed_med  * protein_kcal_share_upper) / 4,
+    
+    protein_g_high_low  = (est_kcal_consumed_high * protein_kcal_share_lower) / 4,
+    protein_g_high_med  = (est_kcal_consumed_high * protein_kcal_share_mean)  / 4,
+    protein_g_high_high = (est_kcal_consumed_high * protein_kcal_share_upper) / 4
   )
 
-# --- CHECKPOINT 3: Inspect the Final Analytical Data ---
-cat("\n--- CHECKPOINT 3: Final data with 'TRUE' protein intake estimates ---\n")
+# --- Checkpoint: Inspect the new 'final_data' frame ---
+cat("\n--- Data frame now contains all 9 protein intake scenarios (using 'med' naming) ---\n")
 final_data %>%
-  # Select key new columns to review
-  select(iso3, sex, age_group, true_protein_g_low, true_protein_g_mean, true_protein_g_high, ear_mean_g_day) %>%
+  # Select a few key columns to see the results
+  select(iso3, sex, age_group, protein_g_low_low, protein_g_med_med, protein_g_high_high) %>%
   head()
 
-cat("\nSummary of the central estimate for 'true' protein intake (grams/day):\n")
-summary(final_data$true_protein_g_mean)
 
+# --------------------------------------------------------------------------
+# PART 5: FINAL INADEQUACY CALCULATION AND SENSITIVITY ANALYSIS (CORRECTED)
+# --------------------------------------------------------------------------
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-# --- Step 1: Load FAO Data ---
-# Load the raw data from the 'data' subfolder
-fao_raw <- read_csv("./data/fao_data_full.csv")
-
-cat("✅ FAO raw data loaded. Glimpse of the data:\n")
-glimpse(fao_raw)
-
-
-# --- FINAL & DEFINITIVE FAO DATA PROCESSING (with whitespace trim) ---
-
-# This code block cleans whitespace, applies robust matching, and will produce
-# the TRUE list of genuinely missing countries.
-
-# Filter for the specific rows we need (no change here)
-fao_calories_filtered <- fao_raw %>%
-  filter(
-    Item == "Grand Total",
-    Element == "Food supply (kcal/capita/day)"
-  )
-
-# Select the identifier columns and the 2018 data column (no change here)
-fao_calories_2018 <- fao_calories_filtered %>%
-  select(
-    `Area Code (M49)`,
-    Area,
-    fao_des_kcal = Y2018
-  )
-
-# Create the final data frame with the added str_trim() fix
-fao_calories <- fao_calories_2018 %>%
-  mutate(
-    # --- THE CRUCIAL FIX IS HERE ---
-    # First, trim leading/trailing whitespace from all Area names
-    Area = stringr::str_trim(Area),
-    
-    # Now, the rest of the matching logic will work on the CLEANED names
-    iso3_guess = countrycode(Area, origin = "country.name", destination = "iso3c", nomatch = NA),
-    
-    iso3 = case_when(
-      Area == "Bolivia (Plurinational State of)" ~ "BOL",
-      Area == "China, mainland" ~ "CHN",
-      Area == "China, Taiwan Province of" ~ "TWN",
-      Area == "Côte d'Ivoire" ~ "CIV",
-      Area == "Czechia" ~ "CZE",
-      Area == "Iran (Islamic Republic of)" ~ "IRN",
-      Area == "Micronesia (Federated States of)" ~ "FSM",
-      Area == "Netherlands (Kingdom of the)" ~ "NLD",
-      Area == "Republic of Korea" ~ "KOR",
-      Area == "Republic of Moldova" ~ "MDA",
-      Area == "Russian Federation" ~ "RUS",
-      Area == "Türkiye" ~ "TUR",
-      Area == "United Kingdom of Great Britain and Northern Ireland" ~ "GBR",
-      Area == "United Republic of Tanzania" ~ "TZA",
-      Area == "United States of America" ~ "USA",
-      Area == "Venezuela (Bolivarian Republic of)" ~ "VEN",
-      Area == "Viet Nam" ~ "VNM",
-      TRUE ~ iso3_guess
-    )
-  ) %>%
-  # The rest of the pipeline is the same
-  select(iso3, fao_des_kcal) %>%
-  filter(!is.na(iso3), !is.na(fao_des_kcal)) %>%
-  group_by(iso3) %>%
-  summarise(fao_des_kcal = mean(fao_des_kcal, na.rm = TRUE), .groups = "drop")
-
-
-# --- FINAL VALIDATION (RE-RUN) ---
-missing_from_fao_final <- prepped_data %>%
-  distinct(iso3) %>%
-  anti_join(fao_calories, by = "iso3")
-
-cat("\n--- FINAL LIST of countries missing from the FAO file (after trim) ---\n")
-if (nrow(missing_from_fao_final) > 0) {
-  cat("The following", nrow(missing_from_fao_final), "countries are GENUINELY MISSING from the source CSV file:\n")
-  print(missing_from_fao_final$iso3)
-} else {
-  cat("✅ Miraculously, all countries were matched!\n")
-}
-
-
-
-
-
-
-
-
-
-#function to calculate protein inadequacy
+# --- Step 5a: Define the inadequacy calculation function ---
 calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requirement) {
-  # Ensure requirement is not NA or negative, handle if necessary
-  if (is.na(requirement) || requirement < 0) return(NA_real_)
-  # Ensure mean_intake and cv_intake are valid
-  if (is.na(mean_intake) || is.na(cv_intake) || mean_intake <= 0 || cv_intake <= 0) return(NA_real_)
-  
+  if (is.na(requirement) || requirement <= 0 || is.na(mean_intake) || is.na(cv_intake) || mean_intake <= 0 || cv_intake <= 0) return(NA_real_)
   if (distribution_type == "gamma") {
-    if (cv_intake^2 == 0) return(NA_real_) # Avoid division by zero if CV is exactly 0
     shape_k <- 1 / (cv_intake^2)
-    scale_theta <- mean_intake / shape_k # which is mean_intake * cv_intake^2
-    p_inadequate <- pgamma(requirement, shape = shape_k, scale = scale_theta)
+    if (shape_k == Inf) return(NA_real_) # Added check for CV near zero
+    scale_theta <- mean_intake * cv_intake^2
+    pgamma(requirement, shape = shape_k, scale = scale_theta)
   } else if (distribution_type == "log-normal") {
-    if (1 + cv_intake^2 <= 0) return(NA_real_) # log argument must be positive
+    if (1 + cv_intake^2 <= 0) return(NA_real_)
     meanlog <- log(mean_intake) - 0.5 * log(1 + cv_intake^2)
     sdlog <- sqrt(log(1 + cv_intake^2))
-    if (is.na(sdlog) || sdlog <=0) return(NA_real_) # sdlog must be positive
-    p_inadequate <- plnorm(requirement, meanlog = meanlog, sdlog = sdlog)
-  } else {
-    # Handle unknown distribution types if any, or stop with an error
-    warning(paste("Unknown distribution type:", distribution_type))
-    p_inadequate <- NA_real_
-  }
-  return(p_inadequate)
+    if(is.na(sdlog) || sdlog <= 0) return(NA_real_)
+    plnorm(requirement, meanlog = meanlog, sdlog = sdlog)
+  } else { NA_real_ }
 }
+
+# --- Step 5b: Calculate inadequacy for all 9 scenarios ---
+# This is a cleaner approach that creates 9 new columns directly.
+
+cat("\n--- Calculating inadequacy for all 9 scenarios... ---\n")
+
+inadequacy_results <- final_data %>%
+  rowwise() %>%
+  mutate(
+    # Central estimate
+    prev_med_med = calculate_inadequacy(protein_g_med_med, cv, best_dist, ear_mean_g_day),
+    
+    # Full sensitivity matrix
+    prev_low_low = calculate_inadequacy(protein_g_low_low, cv, best_dist, ear_low_g_day),
+    prev_low_med = calculate_inadequacy(protein_g_low_med, cv, best_dist, ear_mean_g_day),
+    prev_low_high = calculate_inadequacy(protein_g_low_high, cv, best_dist, ear_high_g_day),
+    
+    prev_med_low = calculate_inadequacy(protein_g_med_low, cv, best_dist, ear_low_g_day),
+    prev_med_high = calculate_inadequacy(protein_g_med_high, cv, best_dist, ear_high_g_day),
+    
+    prev_high_low = calculate_inadequacy(protein_g_high_low, cv, best_dist, ear_low_g_day),
+    prev_high_med = calculate_inadequacy(protein_g_high_med, cv, best_dist, ear_mean_g_day),
+    prev_high_high = calculate_inadequacy(protein_g_high_high, cv, best_dist, ear_high_g_day)
+  ) %>%
+  ungroup()
+
+# --- Step 5c: Summarize the results ---
+
+# Create a long data frame for easy summarization
+prevalence_long <- inadequacy_results %>%
+  select(iso3, sex, age_group, population, starts_with("prev_")) %>%
+  pivot_longer(
+    cols = starts_with("prev_"),
+    names_to = "scenario_label",
+    names_prefix = "prev_",
+    values_to = "prevalence"
+  )
+
+# Calculate global prevalence for each of the 9 scenarios
+global_prevalence_per_scenario <- prevalence_long %>%
+  group_by(scenario_label) %>%
+  summarise(
+    global_prevalence = weighted.mean(prevalence, w = population, na.rm = TRUE)
+  )
+
+cat("\n--- Global Prevalence for Each of the 9 Scenarios ---\n")
+print(global_prevalence_per_scenario)
+
+# Now, find the overall central, min, and max estimates
+final_summary <- global_prevalence_per_scenario %>%
+  summarise(
+    # Use a direct filter to get the single value for the central estimate
+    central_estimate_prevalence = global_prevalence[scenario_label == "med_med"],
+    min_estimate_prevalence = min(global_prevalence, na.rm = TRUE),
+    max_estimate_prevalence = max(global_prevalence, na.rm = TRUE)
+  )
+
+cat("\n--- FINAL GLOBAL SUMMARY (CENTRAL, MIN, MAX) ---\n")
+final_summary %>%
+  mutate(across(everything(), ~ . * 100)) %>%
+  rename_with(~ paste0(., " (%)")) %>%
+  print()
+
+
+# --- Step 5d: Summarize by Sex ---
+
+final_summary_by_sex <- prevalence_long %>%
+  group_by(sex, scenario_label) %>%
+  summarise(
+    sex_prevalence = weighted.mean(prevalence, w = population, na.rm = TRUE),
+    .groups = "drop" # Drop grouping by scenario_label
+  ) %>%
+  group_by(sex) %>% # Re-group just by sex
+  summarise(
+    central_estimate_prevalence = sex_prevalence[scenario_label == "med_med"],
+    min_estimate_prevalence = min(sex_prevalence, na.rm = TRUE),
+    max_estimate_prevalence = max(sex_prevalence, na.rm = TRUE)
+  )
+
+cat("\n--- FINAL SUMMARY BY SEX (CENTRAL, MIN, MAX) ---\n")
+final_summary_by_sex %>%
+  mutate(across(-sex, ~ . * 100)) %>%
+  rename_with(~ ifelse(. == "sex", ., paste0(., " (%)"))) %>%
+  print()
+
+
+# --------------------------------------------------------------------------
+# PART 6: ANALYZE RESULTS BY AGE GROUP
+# --------------------------------------------------------------------------
+
+# We will now summarize the prevalence of inadequacy for each age group to see
+# how risk varies across the lifespan.
+
+# --- Step 6a: Calculate prevalence by age group for each scenario ---
+# We use the 'prevalence_long' data frame we already created.
+
+summary_by_age <- prevalence_long %>%
+  # Group by age group and scenario
+  group_by(age_group, scenario_label) %>%
+  # Calculate the population-weighted average prevalence for that global age group
+  summarise(
+    age_group_prevalence = weighted.mean(prevalence, w = population, na.rm = TRUE),
+    .groups = "drop" # Drop the scenario grouping
+  )
+
+# --- Step 6b: Find the Central, Min, and Max for each age group ---
+
+final_summary_by_age <- summary_by_age %>%
+  # Now group just by age group
+  group_by(age_group) %>%
+  summarise(
+    # Extract the central "med_med" estimate
+    central_estimate_prevalence = age_group_prevalence[scenario_label == "med_med"],
+    # Find the absolute min and max across all 9 scenarios
+    min_estimate_prevalence = min(age_group_prevalence, na.rm = TRUE),
+    max_estimate_prevalence = max(age_group_prevalence, na.rm = TRUE)
+  )
+
+cat("\n--- FINAL SUMMARY BY AGE GROUP (CENTRAL, MIN, MAX) ---\n")
+final_summary_by_age %>%
+  mutate(across(-age_group, ~ . * 100)) %>%
+  rename_with(~ paste0(., " (%)")) %>%
+  print(n = 30)
+
+
+# --- Step 6c: Visualize the results by age group ---
+
+# Order the age groups for the plot's x-axis
+age_group_levels_ordered <- c("0-0.99", "1-4", "5-9", "10-14", "15-19",
+                              "20-24", "25-29", "30-34", "35-39",
+                              "40-44", "45-49", "50-54", "55-59",
+                              "60-64", "65-69", "70-74", "75-79",
+                              "80-84", "85-89", "90-94", "95-99")
+
+plot_inadequacy_by_age <- final_summary_by_age %>%
+  mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered)) %>%
+  ggplot(aes(x = age_group_f, y = central_estimate_prevalence, group = 1)) +
+  # Add a ribbon to show the full uncertainty range (min to max)
+  geom_ribbon(aes(ymin = min_estimate_prevalence, ymax = max_estimate_prevalence),
+              fill = "skyblue", alpha = 0.5) +
+  # Plot the central estimate line on top
+  geom_line(aes(y = central_estimate_prevalence), color = "dodgerblue4", linewidth = 1.2) +
+  geom_point(aes(y = central_estimate_prevalence), color = "dodgerblue4", size = 3) +
+  # Format the y-axis as percentages
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "Global Prevalence of Inadequate Protein Intake by Age Group",
+    subtitle = "Central estimate with full uncertainty range from 9 sensitivity scenarios",
+    x = "Age Group",
+    y = "Prevalence of Inadequacy"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(plot_inadequacy_by_age)
+
+#Over the years, attention to food waste has increased because
+#one-third of food produced for human consumption is
+#lost or wasted globally. From Gustavsson J, Cederberg C, Sonesson U, et al. 
+#Global Food Losses and Food Waste. Extent, Causes and Prevention.
+# 2011. Available at: http://www.fao.org/3/a-i2697e.pdf.
+
+
+#low-med is prolly king
+#next step: calculate the percentage of caloric inadequacy under the low-med scenario
+#see if it's more or less than 20% (that's protein inadequacy)
+
 
 
 
@@ -543,69 +558,70 @@ calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requ
 ####viz of relative protein share by sex, age, countries
 #the 0-0.99 group looks funky for some countries
 
-library(ggplot2)
-library(viridis) # For nice color palettes
+# library(ggplot2)
+# library(viridis) # For nice color palettes
+# 
+# # Plot 1: Overall Distribution of Protein Calorie Share
+# ggplot(prepped_data, aes(x = protein_kcal_share_mean)) +
+#   geom_histogram(aes(y = ..density..), binwidth = 0.01, fill = "skyblue", color = "white", alpha = 0.8) +
+#   geom_density(color = "dodgerblue4", linewidth = 1.2) +
+#   scale_x_continuous(labels = scales::percent_format()) +
+#   labs(
+#     title = "Distribution of Protein's Share of Calories (from GDD data)",
+#     subtitle = "Across all 7,770 country-sex-age strata",
+#     x = "Protein Share of Standardized Calories",
+#     y = "Density"
+#   ) +
+#   theme_minimal()
+# 
+# 
+# # Define the age group order for plotting
+# age_group_levels_ordered <- c("0-0.99", "1-4", "5-9", "10-14", "15-19", "20-24", "25-29",
+#                               "30-34", "35-39", "40-44", "45-49", "50-54", "55-59",
+#                               "60-64", "65-69", "70-74", "75-79", "80-84", "85-89",
+#                               "90-94", "95-99")
+# 
+# prepped_data_viz <- prepped_data %>%
+#   mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered))
+# 
+# # Plot 2: Protein Share by Age and Sex (Boxplots)
+# ggplot(prepped_data_viz, aes(x = age_group_f, y = protein_kcal_share_mean, fill = sex)) +
+#   geom_boxplot(alpha = 0.7, outlier.shape = NA) + # Hide outliers for now to see the box
+#   geom_jitter(aes(color=sex), width=0.2, alpha=0.1, size=0.5) + # Add points to see density
+#   scale_y_continuous(labels = scales::percent_format(), limits = c(0, 0.40)) + # Zoom in, ignore the big outlier
+#   scale_fill_brewer(palette = "Set1") +
+#   scale_color_brewer(palette = "Set1") +
+#   labs(
+#     title = "Protein's Share of Calories by Age Group and Sex",
+#     subtitle = "Each point is a country. Y-axis is zoomed to 0-40% to show main trends.",
+#     x = "Age Group",
+#     y = "Protein Share of Standardized Calories",
+#     fill = "Sex",
+#     color = "Sex"
+#   ) +
+#   theme_minimal(base_size = 14) +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1),
+#         legend.position = "top")
+# 
+# 
+# # Plot 3: Facet by a sample of countries
+# # Let's pick a sample of countries from different regions/income levels
+# sample_iso3 <- c("USA", "JPN", "NGA", "BRA", "IND", "CHN", "FRA", "ETH", "MDG")
+# 
+# prepped_data_viz %>%
+#   filter(iso3 %in% sample_iso3) %>%
+#   ggplot(aes(x = age_group_f, y = protein_kcal_share_mean, color = sex, group = sex)) +
+#   geom_line(linewidth = 1) +
+#   geom_point(size = 2) +
+#   facet_wrap(~iso3, scales = "free_y") + # Use free_y to see the range in each country
+#   scale_y_continuous(labels = scales::percent_format()) +
+#   scale_color_brewer(palette = "Set1") +
+#   labs(
+#     title = "Protein's Share of Calories Across the Lifespan",
+#     subtitle = "For a diverse sample of countries",
+#     x = "Age Group",
+#     y = "Protein Share of Standardized Calories"
+#   ) +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8))
 
-# Plot 1: Overall Distribution of Protein Calorie Share
-ggplot(prepped_data, aes(x = protein_kcal_share_mean)) +
-  geom_histogram(aes(y = ..density..), binwidth = 0.01, fill = "skyblue", color = "white", alpha = 0.8) +
-  geom_density(color = "dodgerblue4", linewidth = 1.2) +
-  scale_x_continuous(labels = scales::percent_format()) +
-  labs(
-    title = "Distribution of Protein's Share of Calories (from GDD data)",
-    subtitle = "Across all 7,770 country-sex-age strata",
-    x = "Protein Share of Standardized Calories",
-    y = "Density"
-  ) +
-  theme_minimal()
-
-
-# Define the age group order for plotting
-age_group_levels_ordered <- c("0-0.99", "1-4", "5-9", "10-14", "15-19", "20-24", "25-29",
-                              "30-34", "35-39", "40-44", "45-49", "50-54", "55-59",
-                              "60-64", "65-69", "70-74", "75-79", "80-84", "85-89",
-                              "90-94", "95-99")
-
-prepped_data_viz <- prepped_data %>%
-  mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered))
-
-# Plot 2: Protein Share by Age and Sex (Boxplots)
-ggplot(prepped_data_viz, aes(x = age_group_f, y = protein_kcal_share_mean, fill = sex)) +
-  geom_boxplot(alpha = 0.7, outlier.shape = NA) + # Hide outliers for now to see the box
-  geom_jitter(aes(color=sex), width=0.2, alpha=0.1, size=0.5) + # Add points to see density
-  scale_y_continuous(labels = scales::percent_format(), limits = c(0, 0.40)) + # Zoom in, ignore the big outlier
-  scale_fill_brewer(palette = "Set1") +
-  scale_color_brewer(palette = "Set1") +
-  labs(
-    title = "Protein's Share of Calories by Age Group and Sex",
-    subtitle = "Each point is a country. Y-axis is zoomed to 0-40% to show main trends.",
-    x = "Age Group",
-    y = "Protein Share of Standardized Calories",
-    fill = "Sex",
-    color = "Sex"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "top")
-
-
-# Plot 3: Facet by a sample of countries
-# Let's pick a sample of countries from different regions/income levels
-sample_iso3 <- c("USA", "JPN", "NGA", "BRA", "IND", "CHN", "FRA", "ETH", "MDG")
-
-prepped_data_viz %>%
-  filter(iso3 %in% sample_iso3) %>%
-  ggplot(aes(x = age_group_f, y = protein_kcal_share_mean, color = sex, group = sex)) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 2) +
-  facet_wrap(~iso3, scales = "free_y") + # Use free_y to see the range in each country
-  scale_y_continuous(labels = scales::percent_format()) +
-  scale_color_brewer(palette = "Set1") +
-  labs(
-    title = "Protein's Share of Calories Across the Lifespan",
-    subtitle = "For a diverse sample of countries",
-    x = "Age Group",
-    y = "Protein Share of Standardized Calories"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8))
