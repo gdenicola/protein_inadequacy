@@ -107,14 +107,20 @@ prepped_data <- prepped_data %>%
   )
 
 
-# Find the row(s) with the highest protein share
-prepped_data %>%
-  arrange(desc(protein_kcal_share_mean)) %>%
-  select(iso3, sex, age_group, gdd_mean, standard_kcal, protein_kcal_share_mean) %>%
-  head()
+# --- Load Marco's Country-Specific EER Data ---
+cat("\n--- Loading Marco's EER data from data_extract_040725.xlsx... ---\n")
 
-
-
+# Load the data from the specified sheet
+library(readxl)
+marco_eer_raw <- read_excel("./data/data_extract_040725.xlsx", sheet = 1)
+glimpse(marco_eer_raw)
+summary(marco_eer_raw)
+unique(marco_eer_raw$Region)
+unique(marco_eer_raw$Sex)
+unique(marco_eer_raw$Age)
+unique(marco_eer_raw$Year)
+unique(marco_eer_raw$Stats)
+unique(marco_eer_raw$Value)
 # --------------------------------------------------------------------------
 # Using the Our World in Data (OWID) Caloric Supply File
 # --------------------------------------------------------------------------
