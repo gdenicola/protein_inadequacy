@@ -36,7 +36,7 @@ population_data <- readRDS("./output/wpp2024_population_aggregated_2018.rds")
 gdd_kcal_standards_old <- tibble::tribble(
   ~age_group, ~standard_kcal,
   "0-0.99",      700,
-  "1-4",        1300, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
+  "1-4",        1225, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
   # A simple weighted average is fine: (1*1000 + 3*1300)/4 = 1225. Let's use that.
   "5-9",        1700,
   "10-14",      2000,
@@ -65,9 +65,9 @@ gdd_kcal_standards_old <- tibble::tribble(
 gdd_kcal_standards <- tibble::tribble(
   ~age_group, ~standard_kcal,
   "0-0.99",     700,
-  "1-4",        1300, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
+  "1-4",        2000, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
   # A simple weighted average is fine: (1*1000 + 3*1300)/4 = 1225. Let's use that.
-  "5-9",        1700,
+  "5-9",        2000,
   "10-14",      2000,
   "15-19",      2000,
   "20-24",      2000,
@@ -631,3 +631,119 @@ print(plot_inadequacy_by_age)
 #   theme_minimal() +
 #   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8))
 
+# ==========================================================================
+# VISUALIZATION: Protein's Share of Calories by Age Group
+# ==========================================================================
+# library(ggplot2)
+# 
+# # --- Step 1: Prepare data for plotting ---
+# # It's crucial to order the age groups correctly on the x-axis. We do this by
+# # converting the 'age_group' column to an ordered factor.
+# 
+# age_group_levels_ordered <- c("0-0.99", "1-4", "5-9", "10-14", "15-19",
+#                               "20-24", "25-29", "30-34", "35-39",
+#                               "40-44", "45-49", "50-54", "55-59",
+#                               "60-64", "65-69", "70-74", "75-79",
+#                               "80-84", "85-89", "90-94", "95-99")
+# 
+# # Create a new data frame for visualization with the ordered factor
+# plot_data <- prepped_data %>%
+#   mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered))
+# 
+# 
+# # --- Step 2: Create the plot ---
+# 
+# protein_share_by_age_plot <- ggplot(plot_data, aes(x = age_group_f, y = protein_kcal_share_mean, fill = sex)) +
+#   
+#   # Use boxplots to show the distribution for each age group across all countries
+#   geom_boxplot(alpha = 0.7, outlier.color = "gray50", outlier.size = 1) +
+#   
+#   # Format the Y-axis to show percentages
+#   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+#   
+#   # Use a clear color scheme
+#   scale_fill_brewer(palette = "Set1") +
+#   
+#   # Add informative labels and a title
+#   labs(
+#     title = "Protein's Share of Standardized Calories by Age and Sex",
+#     subtitle = "Distribution across all countries (n=185). Each box represents the interquartile range.",
+#     x = "Age Group",
+#     y = "Protein Share of Calories",
+#     fill = "Sex"
+#   ) +
+#   
+#   # Use a clean theme and improve readability
+#   theme_minimal(base_size = 14) +
+#   theme(
+#     axis.text.x = element_text(angle = 45, hjust = 1), # Rotate x-axis labels
+#     legend.position = "top"
+#   )
+# 
+# # --- Step 3: Print the plot ---
+# print(protein_share_by_age_plot)
+
+
+# ==========================================================================
+# VISUALIZATION: Mean Protein Share of Calories by Age and Sex
+# ==========================================================================
+library(ggplot2)
+
+# --- Step 1: Define the correct order for age groups ---
+age_group_levels_ordered <- c("0-0.99", "1-4", "5-9", "10-14", "15-19",
+                              "20-24", "25-29", "30-34", "35-39",
+                              "40-44", "45-49", "50-54", "55-59",
+                              "60-64", "65-69", "70-74", "75-79",
+                              "80-84", "85-89", "90-94", "95-99")
+
+# --- Step 2: Calculate the mean protein share for each age-sex group ---
+# This collapses the data from many countries into one average value per group.
+summary_data <- prepped_data %>%
+  # Group by the variables we want on the plot axes
+  group_by(age_group, sex) %>%
+  # Calculate the average protein share for that group
+  summarise(
+    mean_protein_share = mean(protein_kcal_share_mean, na.rm = TRUE),
+    .groups = "drop" # Ungroup after summarising
+  ) %>%
+  # Convert age_group to an ordered factor for correct plotting
+  mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered))
+
+
+# --- Step 3: Create the line plot ---
+mean_protein_share_plot <- ggplot(summary_data, 
+                                  aes(x = age_group_f, 
+                                      y = mean_protein_share, 
+                                      group = sex, 
+                                      color = sex)) +
+  
+  # Draw the lines connecting the mean values
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  
+  # Add points at each age group to make it clear
+  geom_point(size = 3) +
+  
+  # Format the Y-axis to show percentages
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  
+  # Use a clear color scheme
+  scale_color_brewer(palette = "Set1") +
+  
+  # Add informative labels
+  labs(
+    title = "Mean Protein Share of Calories by Age Group and Sex",
+    subtitle = "Global average across all countries",
+    x = "Age Group",
+    y = "Mean Protein Share of Calories",
+    color = "Sex"
+  ) +
+  
+  # Use a clean theme and improve readability
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top"
+  )
+
+# --- Step 4: Print the plot ---
+print(mean_protein_share_plot)
