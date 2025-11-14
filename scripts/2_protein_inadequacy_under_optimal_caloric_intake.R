@@ -107,22 +107,6 @@ prepped_data <- prepped_data %>%
   )
 
 
-# --- Load Marco's Country-Specific EER Data ---
-cat("\n--- Loading Marco's EER data from data_extract_040725.xlsx... ---\n")
-
-# Load the data from the specified sheet
-library(readxl)
-marco_eer_raw <- read_excel("./data/data_extract_040725.xlsx", sheet = 1)
-glimpse(marco_eer_raw)
-summary(marco_eer_raw)
-unique(marco_eer_raw$Region)
-unique(marco_eer_raw$Sex)
-unique(marco_eer_raw$Age)
-unique(marco_eer_raw$Year)
-unique(marco_eer_raw$Stats)
-unique(marco_eer_raw$Value)
-
-
 # ==========================================================================
 # SCRIPT 2: "OPTIMAL CALORIES" SCENARIO
 # ==========================================================================
@@ -398,3 +382,23 @@ cat("=======================================================================\n\n
 cat("--- Breakdown by Sex ---\n")
 print(summary_by_sex_optimal)
 
+
+
+
+# ==========================================================================
+# FINAL STEP OF SCRIPT 2: SAVE THE COMPLETE RESULTS
+# ==========================================================================
+
+# The 'optimal_calories_results' object contains EVERYTHING from this script:
+#  - The original 'prepped_data' (GDD intakes, body weights, EARs, etc.)
+#  - The population data
+#  - Marco's EER data (cleaned and imputed)
+#  - The calculated inadequacy for the "Optimal Calories" scenario
+
+# This is the single, complete object we need for future work.
+
+cat("\n--- Saving the complete 'optimal_calories_results' object... ---\n")
+
+saveRDS(optimal_calories_results, file = "./output/script2_final_results.rds")
+
+cat("--- Data saved successfully to ./output/script2_final_results.rds ---\n")
