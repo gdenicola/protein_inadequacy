@@ -44,7 +44,7 @@ protein_data_full <- readRDS("./output/script2_final_results.rds")
 
 # Load the "Calorie World" from Script 3's final output.
 # It contains our best estimate of actual caloric intake and its distribution shape.
-calorie_data_full <- readRDS("./output/final_calorie_distributions.rds")
+calorie_data_full <- readRDS("./output/final_calorie_distributions_wide.rds")
 
 cat("--- Protein and Calorie worlds have been summoned. ---\n")
 
@@ -65,7 +65,7 @@ final_analysis_data <- protein_data_full %>%
 cat("\n--- The final, unified dataset is ready for analysis: ---\n")
 glimpse(final_analysis_data)
 
-key_cols <- c("kcal_mean", "protein_kcal_share_mean", "cv_protein", "ear_mean_g_day", "cv_calorie")
+key_cols <- c("kcal_mean_medium", "protein_kcal_share_mean", "cv_protein", "ear_mean_g_day", "cv_calorie")
 na_check <- sapply(final_analysis_data[key_cols], function(x) sum(is.na(x)))
 
 if(any(na_check > 0)) {
@@ -86,7 +86,7 @@ if(any(na_check > 0)) {
 final_results <- final_analysis_data %>%
   mutate(
     # Protein provides 4 kcal/gram
-    protein_grams_true = (kcal_mean * protein_kcal_share_mean) / 4
+    protein_grams_true = (kcal_mean_medium * protein_kcal_share_mean) / 4
   )
 
 # --- Step 4: Calculate Final Protein & Calorie Inadequacy ---
@@ -118,7 +118,7 @@ final_results <- final_results %>%
     
     # B) Calculate CALORIE inadequacy
     prevalence_calorie_inadequate = calculate_inadequacy(
-      mean_intake = kcal_mean,               # Our final CALORIE mean
+      mean_intake = kcal_mean_medium,               # Our final CALORIE mean
       cv_intake = cv_calorie,                # The CALORIE CV we matched
       distribution_type = best_dist_calorie, # The CALORIE distribution we matched
       requirement = eer_kcal_marco_mean    # The calorie requirement is the EER
@@ -149,3 +149,4 @@ cat("======================================================\n")
 # --- (Optional) Save the final, most complete dataset ---
 saveRDS(final_results, file = "./output/final_analysis_with_all_inadequacy.rds")
 cat("\n--- Final results object saved successfully. The work is done. ---\n")
+
