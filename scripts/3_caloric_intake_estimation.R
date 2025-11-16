@@ -342,145 +342,187 @@ print(disaggregated_calories_plot)
 
 
 
+# ============================
+# PART 8, CALORIES: Match in-memory means to NutriR Energy shapes (Option A)
+# ============================
 
+# ============================================================
+# ENERGY (kcal) — match NutriR shapes/CVs via same 4-step algo
+# with pre-matching CV repair (fix tiny BFA-F 20–49 CVs at source)
+# ============================================================
 
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(purrr)
+  library(stringr)
+  library(tibble)
+})
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Step 1: Load nutriR protein distribution data
-protein_nutriR <- nutriR::get_dists(nutrients = "Protein")
-
-# Convert age_group to character to avoid factor issues
-protein_nutriR <- protein_nutriR %>%
-  mutate(age_group = as.character(age_group))
-
-# Duplicate "0-4" nutriR distributions to match GDD's under-5 splits
-under5_expansion <- protein_nutriR %>%
-  filter(age_group == "0-4") %>%
-  mutate(age_group = list(c("0-0.99", "1-1.99", "2-4"))) %>%
-  unnest(age_group)
-
-# Bind back to original nutriR
-protein_nutriR <- bind_rows(
-  protein_nutriR %>% filter(age_group != "0-4"),
-  under5_expansion
-)
-
-# Step 2: Load GDD 2018 protein data (v23 = total protein intake)
-protein_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v23_cnty.csv")
-
-# Step 3: Filter to national-level rows and add sex label
-protein_gdd_natl <- protein_gdd %>%
-  filter(year == 2018, edu == 999, urban == 999, age != 999, female != 999) %>%
-  mutate(sex = ifelse(female == 1, "Females", "Males"))
-
-# Step 4: Define age groups
-age_breaks <- c(0, 0.99, 1.99, 4.99, 9.99, 14.99, 19.99, 24.99, 29.99, 34.99,
-                39.99, 44.99, 49.99, 54.99, 59.99, 64.99, 69.99, 74.99,
-                79.99, 84.99, 89.99, 94.99, 99.99)
-
-age_labels <- c("0-0.99","1-1.99","2-4", "5-9", "10-14", "15-19", "20-24", "25-29",
-                "30-34", "35-39", "40-44", "45-49", "50-54", "55-59",
-                "60-64", "65-69", "70-74", "75-79", "80-84", "85-89",
-                "90-94", "95-99")
-
-protein_gdd_natl <- protein_gdd_natl %>%
-  mutate(age_group = cut(age, breaks = age_breaks, labels = age_labels, right = TRUE))
-
-# Step 5: Aggregate to one row per iso3–sex–age_group
-# gdd_0_4 <- protein_gdd_natl %>%
-#   filter(age_group == "0-4", age %in% c(0.5, 1.5, 3.5)) %>%
-#   mutate(weight = case_when(age == 0.5 ~ 1, age == 1.5 ~ 1, age == 3.5 ~ 3)) %>%
-#   group_by(iso3, sex, age_group) %>%
-#   summarise(
-#     gdd_mean = weighted.mean(median, weight, na.rm = TRUE),
-#     gdd_lower = weighted.mean(lowerci_95, weight, na.rm = TRUE),
-#     gdd_upper = weighted.mean(upperci_95, weight, na.rm = TRUE),
-#     .groups = "drop"
-#   )
-
-gdd_clean <- protein_gdd_natl %>%
-  group_by(iso3, sex, age_group) %>%
-  slice(1) %>%
-  ungroup() %>%
-  transmute(
-    iso3, sex, age_group,
-    gdd_mean = median,
-    gdd_lower = lowerci_95,
-    gdd_upper = upperci_95
+# --- Normalizers (same style as protein script) ---
+norm_sex <- function(x) {
+  dplyr::case_when(
+    x %in% c("Males","Male","M") ~ "Males",
+    x %in% c("Females","Female","F") ~ "Females",
+    TRUE ~ x
   )
+}
+norm_age <- function(a) {
+  a <- as.character(a)
+  a <- str_replace_all(a, "\\s", "")
+  a <- str_replace_all(a, "–", "-")
+  a
+}
 
-protein_gdd_agg <- gdd_clean %>%
-  arrange(iso3, sex, age_group)
-
-#convert age to character to prevent later matching issues
-protein_gdd_agg <- protein_gdd_agg %>%
-  mutate(age_group = as.character(age_group))
-
-# -----------------------------
-# MATCHING STEPS 1–3
-# -----------------------------
-gdd_keys <- protein_gdd_agg %>% select(iso3, sex, age_group) %>% distinct()
-nutrir_keys <- protein_nutriR %>% select(iso3, sex, age_group) %>% distinct()
-nutrir_keys <- protein_nutriR %>%
-  mutate(age_group = as.character(age_group)) %>%
-  select(iso3, sex, age_group) %>%
-  distinct()
-
-
-# Step 1: Exact match
-matched_1_exact <- inner_join(gdd_keys, nutrir_keys, by = c("iso3", "sex", "age_group")) %>%
-  mutate(match_iso3 = iso3, match_sex = sex, match_age_group = age_group, source = "exact")
-
-# Step 2: Nearest age in same iso3/sex
+# nearest-age helper used multiple times
 find_nearest_age <- function(target, pool) {
-  target_mid <- as.numeric(sub("([0-9]+)-.*", "\\1", target))
-  pool_mids <- as.numeric(sub("([0-9]+)-.*", "\\1", pool))
+  target_mid <- suppressWarnings(as.numeric(sub("([0-9]+)-.*", "\\1", target)))
+  pool_mids  <- suppressWarnings(as.numeric(sub("([0-9]+)-.*", "\\1", pool)))
+  if (length(pool) == 0 || all(is.na(pool_mids))) return(NA_character_)
   pool[which.min(abs(pool_mids - target_mid))]
 }
 
-unmatched_1 <- anti_join(gdd_keys, matched_1_exact, by = c("iso3", "sex", "age_group"))
+# ------------------------------------------------------------
+# 0) Build Energy means at iso3/sex/age_group (already 0-0.99, 1-4, 5-9, ...)
+# ------------------------------------------------------------
+calories_means <- disaggregated_data %>%
+  transmute(
+    iso3,
+    sex = norm_sex(sex),
+    age_group = norm_age(age_group),       # includes "1-4" in your in-memory data
+    kcal_mean = kcal_consumed_stratum
+  ) %>%
+  arrange(iso3, sex, age_group)
+
+cal_keys <- calories_means %>% select(iso3, sex, age_group) %>% distinct()
+
+# ------------------------------------------------------------
+# 1) NutriR Energy shapes; expand 0-4 to 0-0.99/1-1.99/2-4; synthesize "1-4" from "2-4"
+# ------------------------------------------------------------
+energy_nutriR_raw <- nutriR::get_dists(nutrients = "Energy") %>%
+  mutate(
+    sex = norm_sex(sex),
+    age_group = as.character(age_group)
+  )
+
+# Expand 0-4 into fine bins
+u5_expand <- energy_nutriR_raw %>%
+  filter(age_group == "0-4") %>%
+  mutate(age_group = list(c("0-0.99","1-1.99","2-4"))) %>%
+  unnest(age_group)
+
+energy_nutriR_fine <- bind_rows(
+  energy_nutriR_raw %>% filter(age_group != "0-4"),
+  u5_expand
+)
+
+# Create synthetic 1-4 by copying shapes from 2-4 (same convention as protein script)
+energy_nutriR_u14 <- energy_nutriR_fine %>%
+  filter(age_group == "2-4") %>%
+  mutate(age_group = "1-4")
+
+energy_shapes_base <- bind_rows(energy_nutriR_fine, energy_nutriR_u14) %>%
+  mutate(age_group = norm_age(age_group)) %>%
+  group_by(iso3, sex, age_group) %>%
+  slice(1) %>%     # de-dup
+  ungroup()
+
+# ------------------------------------------------------------
+# 1B) PRE-MATCH CV REPAIR (fix tiny CVs by re-borrowing within the same donor)
+# ------------------------------------------------------------
+cv_floor <- 0.05  # change if you want a different minimum acceptable CV
+
+age_levels_for_order <- c("0-0.99","1-1.99","1-4","2-4","5-9","10-14","15-19","20-24","25-29","30-34",
+                          "35-39","40-44","45-49","50-54","55-59","60-64","65-69","70-74","75-79",
+                          "80-84","85-89","90-94","95-99")
+
+energy_shapes_fix <- (function(es, floor_cv) {
+  es <- es %>%
+    mutate(age_group_chr = as.character(age_group),
+           age_group_ord = factor(age_group_chr, levels = age_levels_for_order))
+  
+  # rows that need fixing
+  to_fix <- es %>% filter(!is.na(cv) & cv < floor_cv)
+  
+  if (nrow(to_fix) == 0) {
+    message(sprintf("🔎 CV repair: nothing to fix (no cv < %.3f).", floor_cv))
+    return(es %>% select(-age_group_chr, -age_group_ord))
+  }
+  
+  # helper: nearest acceptable age within same (iso3,sex)
+  find_replacement_row <- function(iso3_i, sex_i, age_i) {
+    pool_ok <- es %>% filter(iso3 == iso3_i, sex == sex_i, !is.na(cv) & cv >= floor_cv)
+    if (nrow(pool_ok) > 0) {
+      # nearest by age midpoint
+      nearest_age <- find_nearest_age(age_i, as.character(pool_ok$age_group))
+      pool_ok %>% filter(as.character(age_group) == nearest_age) %>% slice(1)
+    } else {
+      # fallback: any nearest age within donor, even if CV < floor (then we’ll floor it)
+      pool_any <- es %>% filter(iso3 == iso3_i, sex == sex_i)
+      if (nrow(pool_any) > 0) {
+        nearest_age <- find_nearest_age(age_i, as.character(pool_any$age_group))
+        pool_any %>% filter(as.character(age_group) == nearest_age) %>% slice(1)
+      } else {
+        NULL
+      }
+    }
+  }
+  
+  # build a table of replacements
+  replacements <- to_fix %>%
+    rowwise() %>%
+    mutate(.rep = list(find_replacement_row(iso3, sex, as.character(age_group)))) %>%
+    ungroup()
+  
+  # apply replacements
+  es_fixed <- es
+  n_replaced <- 0L
+  for (i in seq_len(nrow(replacements))) {
+    row_i <- replacements[i,]
+    rep_i <- row_i$.rep[[1]]
+    key <- with(row_i, paste(iso3, sex, as.character(age_group)))
+    if (!is.null(rep_i) && nrow(rep_i) == 1) {
+      # Copy both best_dist and cv from replacement
+      es_fixed <- es_fixed %>%
+        mutate(
+          best_dist = if_else(iso3 == row_i$iso3 & sex == row_i$sex &
+                                as.character(age_group) == as.character(row_i$age_group),
+                              rep_i$best_dist, best_dist),
+          cv = if_else(iso3 == row_i$iso3 & sex == row_i$sex &
+                         as.character(age_group) == as.character(row_i$age_group),
+                       rep_i$cv, cv)
+        )
+      n_replaced <- n_replaced + 1L
+    } else {
+      # Last resort: just floor CV (keep best_dist)
+      es_fixed <- es_fixed %>%
+        mutate(
+          cv = if_else(iso3 == row_i$iso3 & sex == row_i$sex &
+                         as.character(age_group) == as.character(row_i$age_group) & cv < floor_cv,
+                       floor_cv, cv)
+        )
+      n_replaced <- n_replaced + 1L
+    }
+  }
+  
+  message(sprintf("🩹 CV repair: adjusted %d rows with cv < %.3f", n_replaced, floor_cv))
+  
+  es_fixed %>% select(-age_group_chr, -age_group_ord)
+})(energy_shapes_base, cv_floor)
+
+# Keep the repaired shapes under the conventional name
+energy_shapes <- energy_shapes_fix
+
+nutrir_keys <- energy_shapes %>%
+  select(iso3, sex, age_group) %>% distinct()
+
+# ------------------------------------------------------------
+# 2) Steps 1–3 (exact; nearest age same sex; opposite sex same age)
+# ------------------------------------------------------------
+matched_1_exact <- inner_join(cal_keys, nutrir_keys, by = c("iso3","sex","age_group")) %>%
+  mutate(match_iso3 = iso3, match_sex = sex, match_age_group = age_group, source = "exact")
+
+unmatched_1 <- anti_join(cal_keys, matched_1_exact, by = c("iso3","sex","age_group"))
 
 matched_2_age <- unmatched_1 %>%
   mutate(match = pmap(list(iso3, sex, age_group), function(iso, s, ag) {
@@ -492,14 +534,12 @@ matched_2_age <- unmatched_1 %>%
   unnest(match, names_sep = "_") %>%
   mutate(source = "nearest_age")
 
-# Step 3: Opposite sex, same iso3 + age group
-unmatched_2 <- anti_join(unmatched_1, matched_2_age, by = c("iso3", "sex", "age_group"))
+unmatched_2 <- anti_join(unmatched_1, matched_2_age, by = c("iso3","sex","age_group"))
 
 matched_3_sex <- unmatched_2 %>%
   mutate(match = pmap(list(iso3, sex, age_group), function(iso, s, ag) {
     opposite <- ifelse(s == "Males", "Females", "Males")
-    nutrir_keys %>%
-      filter(iso3 == iso, sex == opposite, as.character(age_group) == as.character(ag))
+    nutrir_keys %>% filter(iso3 == iso, sex == opposite, as.character(age_group) == as.character(ag))
   })) %>%
   unnest(match, names_sep = "_") %>%
   mutate(source = "opposite_sex")
@@ -510,160 +550,211 @@ all_matches_1_3 <- bind_rows(
   matched_3_sex
 )
 
-# -----------------------------
-# STEP 4: Fallback to nearest country with known shape
-# -----------------------------
+# ------------------------------------------------------------
+# 3) Step 4 (nearest country) — distance in country kcal (like your protein mean distance)
+# ------------------------------------------------------------
+country_kcal <- country_level_data %>%
+  select(iso3, est_kcal_consumed_per_capita)
 
-# Re-define helper in case not scoped
-find_nearest_age <- function(target, pool) {
-  target_mid <- as.numeric(sub("([0-9]+)-.*", "\\1", target))
-  pool_mids <- as.numeric(sub("([0-9]+)-.*", "\\1", pool))
-  pool[which.min(abs(pool_mids - target_mid))]
-}
+stopifnot(!any(is.na(country_kcal$est_kcal_consumed_per_capita)))
+dist_mat <- as.matrix(dist(column_to_rownames(country_kcal, "iso3")))
 
-# Identify unmatched from Steps 1–3
-unmatched_3 <- anti_join(gdd_keys, all_matches_1_3, by = c("iso3", "sex", "age_group"))
-
-# Build GDD country means
-gdd_country_means <- protein_gdd_agg %>%
-  group_by(iso3) %>%
-  summarise(protein_mean = mean(gdd_mean, na.rm = TRUE), .groups = "drop")
-
-# Euclidean distance matrix between countries
-dist_mat <- as.matrix(dist(column_to_rownames(gdd_country_means, "iso3")))
-
-# Identify fallback iso3 (closest country w/ matched distributions)
+unmatched_3 <- anti_join(cal_keys, all_matches_1_3, by = c("iso3","sex","age_group"))
 shape_donor_iso3s <- unique(all_matches_1_3$match_iso3)
-iso_match_key <- tibble(iso3 = unique(unmatched_3$iso3)) %>%
-  rowwise() %>%
-  mutate(fallback_iso3 = names(sort(dist_mat[iso3, shape_donor_iso3s]))[1]) %>%
-  ungroup()
 
-# Perform fallback match with 4 levels of logic
-step4_fallback <- unmatched_3 %>%
-  left_join(iso_match_key, by = "iso3") %>%
-  rowwise() %>%
-  mutate(
-    match = list({
-      fallback <- fallback_iso3
-      target_sex <- sex
-      target_age <- age_group
-      opposite_sex <- ifelse(sex == "Males", "Females", "Males")
-      pool <- all_matches_1_3
-      
-      # 1. Exact sex + age
-      m1 <- pool %>%
-        filter(
-          match_iso3 == fallback,
-          match_sex == target_sex,
-          as.character(match_age_group) == as.character(target_age)
-        )
-      if (nrow(m1) > 0) {
-        m1 <- m1 %>% slice(1) %>% mutate(source = "nearest_country_exact")
-        return_value <- m1
-      } else {
-        # 2. Nearest age, same sex
-        pool_same_sex <- pool %>%
-          filter(match_iso3 == fallback, match_sex == target_sex)
-        if (nrow(pool_same_sex) > 0) {
-          nearest_age <- find_nearest_age(target_age, pool_same_sex$match_age_group)
-          m2 <- pool_same_sex %>% filter(match_age_group == nearest_age)
-          if (nrow(m2) > 0) {
-            m2 <- m2 %>% slice(1) %>% mutate(source = "nearest_country_nearest_age")
-            return_value <- m2
-          } else {
-            # 3. Same age, opposite sex
-            m3 <- pool %>%
-              filter(match_iso3 == fallback, match_sex == opposite_sex, match_age_group == target_age)
-            if (nrow(m3) > 0) {
-              m3 <- m3 %>% slice(1) %>% mutate(source = "nearest_country_opposite_sex")
-              return_value <- m3
-            } else {
-              # 4. Nearest age + opposite sex
-              pool_opp <- pool %>%
-                filter(match_iso3 == fallback, match_sex == opposite_sex)
-              if (nrow(pool_opp) > 0) {
-                nearest_age_opp <- find_nearest_age(target_age, pool_opp$match_age_group)
-                m4 <- pool_opp %>% filter(match_age_group == nearest_age_opp)
-                if (nrow(m4) > 0) {
-                  m4 <- m4 %>% slice(1) %>% mutate(source = "ultimate_fallback_opposite_sex_nearest_age")
-                  return_value <- m4
-                } else {
-                  return_value <- NULL
-                }
-              } else {
-                return_value <- NULL
-              }
+if (length(shape_donor_iso3s) == 0 || nrow(unmatched_3) == 0) {
+  step4_fallback <- tibble(
+    iso3 = character(), sex = character(), age_group = character(),
+    match_iso3 = character(), match_sex = character(), match_age_group = character(),
+    source = character()
+  )
+} else {
+  iso_match_key <- tibble(iso3 = unique(unmatched_3$iso3)) %>%
+    rowwise() %>%
+    mutate(fallback_iso3 = names(sort(dist_mat[iso3, shape_donor_iso3s]))[1]) %>%
+    ungroup()
+  
+  step4_fallback <- unmatched_3 %>%
+    left_join(iso_match_key, by = "iso3") %>%
+    rowwise() %>%
+    mutate(
+      match = list({
+        fallback <- fallback_iso3
+        target_sex <- sex
+        target_age <- age_group
+        opposite_sex <- ifelse(sex == "Males", "Females", "Males")
+        pool <- all_matches_1_3
+        
+        return_value <- NULL
+        
+        # 4a exact sex+age in fallback
+        m1 <- pool %>% filter(match_iso3 == fallback,
+                              match_sex == target_sex,
+                              as.character(match_age_group) == as.character(target_age))
+        if (nrow(m1) > 0) {
+          return_value <- m1 %>% slice(1) %>% mutate(source = "nearest_country_exact")
+        } else {
+          # 4b nearest age same sex
+          pool_same <- pool %>% filter(match_iso3 == fallback, match_sex == target_sex)
+          if (nrow(pool_same) > 0) {
+            nearest_age <- find_nearest_age(target_age, pool_same$match_age_group)
+            m2 <- pool_same %>% filter(match_age_group == nearest_age)
+            if (nrow(m2) > 0) {
+              return_value <- m2 %>% slice(1) %>% mutate(source = "nearest_country_nearest_age")
             }
           }
-        } else {
-          # Fall back directly to opposite sex
-          m3 <- pool %>%
-            filter(match_iso3 == fallback, match_sex == opposite_sex, match_age_group == target_age)
-          if (nrow(m3) > 0) {
-            m3 <- m3 %>% slice(1) %>% mutate(source = "nearest_country_opposite_sex")
-            return_value <- m3
-          } else {
-            pool_opp <- pool %>%
-              filter(match_iso3 == fallback, match_sex == opposite_sex)
+          # 4c same age opposite sex
+          if (is.null(return_value)) {
+            m3 <- pool %>% filter(match_iso3 == fallback,
+                                  match_sex == opposite_sex,
+                                  as.character(match_age_group) == as.character(target_age))
+            if (nrow(m3) > 0) {
+              return_value <- m3 %>% slice(1) %>% mutate(source = "nearest_country_opposite_sex")
+            }
+          }
+          # 4d nearest age opposite sex
+          if (is.null(return_value)) {
+            pool_opp <- pool %>% filter(match_iso3 == fallback, match_sex == opposite_sex)
             if (nrow(pool_opp) > 0) {
               nearest_age_opp <- find_nearest_age(target_age, pool_opp$match_age_group)
               m4 <- pool_opp %>% filter(match_age_group == nearest_age_opp)
               if (nrow(m4) > 0) {
-                m4 <- m4 %>% slice(1) %>% mutate(source = "ultimate_fallback_opposite_sex_nearest_age")
-                return_value <- m4
-              } else {
-                return_value <- NULL
+                return_value <- m4 %>% slice(1) %>% mutate(source = "ultimate_fallback_opposite_sex_nearest_age")
               }
-            } else {
-              return_value <- NULL
             }
           }
         }
-      }
-      
-      return_value
-    })
-  ) %>%
-  unnest(match, names_sep = "_", names_repair = "unique") %>%
-  ungroup()
+        return_value
+      })
+    ) %>%
+    unnest(match, names_sep = "_", names_repair = "unique") %>%
+    ungroup()
+}
 
-all_matches_final <- bind_rows(all_matches_1_3, step4_fallback)
-final_unmatched <- anti_join(gdd_keys, all_matches_final, by = c("iso3", "sex", "age_group"))
-
-cat("✅ Total matched:", nrow(all_matches_final), "\n")
-cat("❌ Still unmatched after Step 4:", nrow(final_unmatched), "\n")
-
-all_matches_final <- all_matches_final %>%
+cal_matches_final <- bind_rows(all_matches_1_3, step4_fallback) %>%
   mutate(source_final = coalesce(source, match_source)) %>%
-  select(-source, -match_source)  # Optionally drop old columns
+  select(-source, -match_source, -match_match_iso3, -match_match_sex, -match_match_age_group)
 
-#drop more redundant columns
-all_matches_final <- all_matches_final %>%
-  select(-match_match_iso3, -match_match_sex, -match_match_age_group)
+final_unmatched_cal <- anti_join(cal_keys, cal_matches_final, by = c("iso3","sex","age_group"))
+cat("✅ [Calories] Total matched:", nrow(cal_matches_final), "\n")
+cat("❌ [Calories] Still unmatched after Step 4:", nrow(final_unmatched_cal), "\n")
 
+# ------------------------------------------------------------
+# 4) Join means + (repaired) shapes/CV
+# ------------------------------------------------------------
+calories_distributions <- cal_matches_final %>%
+  left_join(calories_means, by = c("iso3","sex","age_group")) %>%
+  left_join(energy_shapes,
+            by = c("match_iso3"="iso3","match_sex"="sex","match_age_group"="age_group"))
 
-####NOW WE HAVE FULL MATCHING DICTIONARY#########
-##########################################################################
+missing_shape_n <- sum(is.na(calories_distributions$best_dist))
+cat("🔎 [Calories] Missing shapes after first join:", missing_shape_n, "\n")
 
+# ------------------------------------------------------------
+# 5) Repair after join (nearest age same sex within donor, then opposite sex + nearest age)
+# ------------------------------------------------------------
+if (missing_shape_n > 0) {
+  # Map available ages per (iso3, sex) from *repaired* energy_shapes
+  avail_by_iso_sex <- energy_shapes %>%
+    distinct(iso3, sex, age_group) %>%
+    group_by(iso3, sex) %>%
+    summarise(avail_ages = list(sort(unique(as.character(age_group)))), .groups = "drop")
+  
+  # A) Same sex nearest age
+  missing_keys <- calories_distributions %>%
+    filter(is.na(best_dist)) %>%
+    distinct(match_iso3, match_sex, match_age_group)
+  
+  remap_same <- missing_keys %>%
+    left_join(avail_by_iso_sex, by = c("match_iso3"="iso3","match_sex"="sex")) %>%
+    mutate(new_age = ifelse(lengths(avail_ages) > 0,
+                            map2_chr(match_age_group, avail_ages, find_nearest_age),
+                            NA_character_)) %>%
+    select(match_iso3, match_sex, match_age_group, new_age)
+  
+  cal_matches_final_v2 <- cal_matches_final %>%
+    left_join(remap_same, by = c("match_iso3","match_sex","match_age_group")) %>%
+    mutate(match_age_group = if_else(!is.na(new_age), new_age, match_age_group)) %>%
+    select(-new_age)
+  
+  calories_distributions_v2 <- cal_matches_final_v2 %>%
+    left_join(calories_means, by = c("iso3","sex","age_group")) %>%
+    left_join(energy_shapes,
+              by = c("match_iso3"="iso3","match_sex"="sex","match_age_group"="age_group"))
+  
+  na_after_A <- sum(is.na(calories_distributions_v2$best_dist))
+  cat("🛠  Repair A (nearest age same sex) — remaining missing:", na_after_A, "\n")
+  
+  # B) Opposite sex nearest age (only those still missing)
+  if (na_after_A > 0) {
+    opp <- function(s) ifelse(s == "Males", "Females", "Males")
+    
+    still_missing <- calories_distributions_v2 %>%
+      filter(is.na(best_dist)) %>%
+      distinct(match_iso3, match_sex, match_age_group) %>%
+      mutate(match_sex_opp = opp(match_sex))
+    
+    remap_opp <- still_missing %>%
+      left_join(avail_by_iso_sex, by = c("match_iso3"="iso3","match_sex_opp"="sex")) %>%
+      mutate(new_age_opp = ifelse(lengths(avail_ages) > 0,
+                                  map2_chr(match_age_group, avail_ages, find_nearest_age),
+                                  NA_character_)) %>%
+      transmute(
+        match_iso3,
+        old_match_sex = match_sex,
+        old_match_age_group = match_age_group,
+        match_sex = match_sex_opp,
+        match_age_group = new_age_opp
+      )
+    
+    cal_matches_final_v3 <- cal_matches_final_v2 %>%
+      left_join(
+        remap_opp,
+        by = c("match_iso3",
+               "match_sex" = "old_match_sex",
+               "match_age_group" = "old_match_age_group")
+      ) %>%
+      mutate(
+        match_sex       = if_else(!is.na(match_sex.y), match_sex.y, match_sex.x),
+        match_age_group = if_else(!is.na(match_age_group.y), match_age_group.y, match_age_group.x)
+      ) %>%
+      select(-ends_with(".x"), -ends_with(".y"))
+    
+    calories_distributions_v3 <- cal_matches_final_v3 %>%
+      left_join(calories_means, by = c("iso3","sex","age_group")) %>%
+      left_join(energy_shapes,
+                by = c("match_iso3"="iso3","match_sex"="sex","match_age_group"="age_group"))
+    
+    na_after_B <- sum(is.na(calories_distributions_v3$best_dist))
+    cat("🛠  Repair B (nearest age opposite sex) — remaining missing:", na_after_B, "\n")
+    
+    # pick best version
+    if (na_after_B < na_after_A) {
+      cal_matches_final      <- cal_matches_final_v3
+      calories_distributions <- calories_distributions_v3
+    } else {
+      cal_matches_final      <- cal_matches_final_v2
+      calories_distributions <- calories_distributions_v2
+    }
+  } else {
+    cal_matches_final      <- cal_matches_final_v2
+    calories_distributions <- calories_distributions_v2
+  }
+}
 
-# Merge GDD mean protein intakes with matched nutriR distribution shapes.
-# Each row represents a country–sex–age_group group from GDD, matched to a 
-# distribution from nutriR (via exact or 4-fold fallback logic) to allow reconstruction
-# of full intake distributions and downstream estimation of inadequacy.
-gdd_distributions <- all_matches_final %>%
-  left_join(protein_gdd_agg, by = c("iso3", "sex", "age_group")) %>%
-  left_join(protein_nutriR, 
-            by = c("match_iso3" = "iso3", "match_sex" = "sex", "match_age_group" = "age_group"))
-
-#create leaner version by keeping only needed variables
-#only keep variables needed to get full distributions
-gdd_distributions_lean <- gdd_distributions %>%
+# ------------------------------------------------------------
+# 6) Lean output + assertions (mirrors protein)
+# ------------------------------------------------------------
+calories_distributions_lean <- calories_distributions %>%
   select(
-    iso3, sex, age_group,      # group identifiers
-    gdd_mean, gdd_lower, gdd_upper,  # mean intake and uncertainty
+    iso3, sex, age_group,      # identifiers
+    kcal_mean,                 # in-memory mean (already harmonized bins)
     best_dist,                 # distribution type
-    cv                         # matched coefficient of variation
+    cv,                        # coefficient of variation (now repaired at source)
+    source_final               # diagnostic of where the shape came from
   )
 
-#we now have fully specified distributions for every subgroup!
+
+# This is the last command in your Script 3
+saveRDS(calories_distributions_lean, file = "./output/final_calorie_distributions.rds")
+
