@@ -179,11 +179,26 @@ mder_stratum_specific <- mder_disaggregation_data %>%
 
 cat("--- MDER disaggregation complete. ---\n")
 
+# after you create mder_stratum_specific
+mder_stratum_specific <- mder_stratum_specific %>%
+  distinct(iso3, sex, age_group, .keep_all = TRUE)   # add year/scenario if they’re real keys
 
-# --- Step 4c: Join the Stratum-Specific MDER to the Main Analytical Dataset ---
-# Now we add our new, more precise 'mder_stratum_kcal' column.
+# re-run the reconstruction check with RIGHT side distinct
+check_mder <- mder_disaggregation_data %>%
+  left_join(mder_stratum_specific, by = c("iso3","sex","age_group")) %>%
+  filter(!is.na(mder_stratum_kcal), population > 0) %>%
+  group_by(iso3) %>%  # add year if applicable
+  summarise(
+    mder_nat   = first(mder_kcal),
+    mder_recon = sum(mder_stratum_kcal * population) / sum(population),
+    diff       = mder_recon - mder_nat,
+    .groups = "drop"
+  )
+stopifnot(max(abs(check_mder$diff), na.rm = TRUE) < 1e-6)
+
+# now the join back won’t warn
 final_analysis_data <- final_analysis_data %>%
-  left_join(mder_stratum_specific, by = c("iso3", "sex", "age_group"))
+  left_join(mder_stratum_specific, by = c("iso3","sex","age_group"))
 
 # --- Verification ---
 cat("\n--- Verifying the disaggregated MDER values for the USA ---\n")
@@ -241,7 +256,7 @@ final_results <- final_results %>%
       mean_intake = kcal_mean_medium,               # Our final CALORIE mean
       cv_intake = cv_calorie,                # The CALORIE CV we matched
       distribution_type = best_dist_calorie, # The CALORIE distribution we matched
-      requirement = mder_stratum_kcal    # The calorie requirement is the EER
+      requirement = mder_stratum_kcal    # The calorie requirement is the MDER by group
     )
   ) %>%
   ungroup()
