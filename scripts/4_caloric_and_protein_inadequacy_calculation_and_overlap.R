@@ -3,6 +3,14 @@
 #calculate absolute protein levels by multiplying protein share for actual calories
 #calculate absolute protein inadequacy caloric inadequacy and check overlap
 
+#new approach: aim for having prevalence of undernutrition around 8.2%
+# this is the current FAO estimate. we can tune our waste on that, and
+# see what's the prevalence of protein inadequacy at these level. This is 
+# how we will tune our "med" waste scenario. 
+
+#to estimate prevalence of undernutrition in our data, we will take
+#FAO
+
 
 # Load required packages
 library(dplyr)
@@ -60,20 +68,132 @@ final_analysis_data <- protein_data_full %>%
     suffix = c("_protein", "_calorie") # e.g., 'cv_protein', 'cv_calorie'
   )
 
-# --- Final Verification ---
-# Glimpse the data and check for any NAs in the key columns we are about to use.
-cat("\n--- The final, unified dataset is ready for analysis: ---\n")
+# ==========================================================================
+# PART 3: LOAD AND PREPARE MINIMUM DIETARY ENERGY REQUIREMENT (MDER) DATA
+# ==========================================================================
+
+cat("\n--- Loading FAO Minimum Dietary Energy Requirement (MDER) data... ---\n")
+
+# --- Step 3a: Load the raw data from OWID ---
+owid_mder_raw <- read_csv("./data/OWID_minimum-requirement-calories.csv", show_col_types = FALSE)
+
+# --- Step 3b: Clean and select the 2018 data ---
+owid_mder <- owid_mder_raw %>%
+  filter(Year == 2018) %>%
+  # Select and rename the column for clarity
+  select(
+    iso3 = Code, 
+    mder_kcal = `Minimum dietary energy requirement  (kcal/cap/day) | 00021056 || Value | 006128 || kilocalories per person per day`
+  ) %>%
+  filter(!is.na(iso3) & nchar(iso3) == 3)
+
+# --- Step 3c: Identify which countries need imputation ---
+# THE FIX: First, create the 'all_countries_needed' object from our master dataset.
+all_countries_needed <- final_analysis_data %>% 
+  distinct(iso3)
+
+# Now, use this list to check for missing countries in the MDER data.
+countries_missing_mder <- all_countries_needed %>%
+  anti_join(owid_mder, by = "iso3")
+
+# --- Step 3d: Report the findings ---
+if (nrow(countries_missing_mder) > 0) {
+  cat("\n⚠️ WARNING:", nrow(countries_missing_mder), "countries in our analysis are MISSING from the MDER dataset and will require imputation:\n")
+  print(countries_missing_mder)
+} else {
+  cat("\n✅ SUCCESS! All countries required for our analysis have MDER data.\n")
+}
+
+# ==========================================================================
+# PART 3 (Continued): IMPUTE AND FINALIZE MDER DATA
+# ==========================================================================
+
+# --- Step 3e: Impute the single missing country (MHL) using its peer (FJI) ---
+
+cat("\n--- Imputing MDER for the Marshall Islands (MHL) using Fiji (FJI) as a proxy... ---\n")
+
+# First, get the MDER value for our proxy country, Fiji
+fiji_mder_value <- owid_mder %>%
+  filter(iso3 == "FJI") %>%
+  pull(mder_kcal) # pull() extracts the single value
+
+# Create a small tibble for the imputed row
+mhl_imputed_row <- tibble(
+  iso3 = "MHL",
+  mder_kcal = fiji_mder_value
+)
+
+# Bind this imputed row to the main MDER dataset
+mder_final_complete <- bind_rows(owid_mder, mhl_imputed_row)
+
+
+# --- Step 3g: Join the MDER data to our main analytical dataset ---
+# Now we add the 'mder_kcal' column to our main data frame.
+final_analysis_data <- final_analysis_data %>%
+  left_join(mder_final_complete, by = "iso3")
+
+cat("\n--- MDER data successfully joined to the final analysis dataset. ---\n")
 glimpse(final_analysis_data)
 
-key_cols <- c("kcal_mean_medium", "protein_kcal_share_mean", "cv_protein", "ear_mean_g_day", "cv_calorie")
-na_check <- sapply(final_analysis_data[key_cols], function(x) sum(is.na(x)))
 
-if(any(na_check > 0)) {
-  cat("\n⚠️ WARNING: NAs detected in key columns after the join. This should not happen.\n")
-  print(na_check[na_check > 0])
-} else {
-  cat("\n✅ SUCCESS: The final dataset is complete and key columns have no missing values.\n")
-}
+
+# ==========================================================================
+# PART 4: DISAGGREGATE NATIONAL MDER TO STRATUM-SPECIFIC VALUES
+# ==========================================================================
+
+# --- Step 4a: Create a temporary data frame for the disaggregation ---
+# This joins the national MDER to the master data which contains the EERs and population.
+# The 'master_data' object was loaded at the beginning of this script.
+mder_disaggregation_data <- final_analysis_data %>%
+  # We only need a few columns for this calculation
+  select(iso3, sex, age_group, population, eer_kcal_marco_mean) %>%
+  # Join the national-level MDER value
+  left_join(mder_final_complete, by = "iso3")
+
+# --- Step 4b: Perform the MDER Disaggregation ---
+# The logic is identical to how we disaggregated caloric supply.
+cat("\n--- Disaggregating national MDER to stratum-specific values... ---\n")
+
+mder_stratum_specific <- mder_disaggregation_data %>%
+  # For each country...
+  group_by(iso3) %>%
+  
+  # Calculate the population-weighted average EER for that country.
+  # This serves as our reference point for the "average" person's need.
+  mutate(
+    avg_country_eer = weighted.mean(eer_kcal_marco_mean, w = population, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  
+  # Now, calculate the adjustment factor for each stratum based on its EER.
+  mutate(
+    adjustment_factor = eer_kcal_marco_mean / avg_country_eer,
+    
+    # Finally, apply this factor to the national MDER to get the
+    # final, stratum-specific minimum energy requirement.
+    mder_stratum_kcal = mder_kcal * adjustment_factor
+  ) %>%
+  
+  # Select only the columns we need to join back to our main data
+  select(iso3, sex, age_group, mder_stratum_kcal)
+
+cat("--- MDER disaggregation complete. ---\n")
+
+
+# --- Step 4c: Join the Stratum-Specific MDER to the Main Analytical Dataset ---
+# Now we add our new, more precise 'mder_stratum_kcal' column.
+final_analysis_data <- final_analysis_data %>%
+  left_join(mder_stratum_specific, by = c("iso3", "sex", "age_group"))
+
+# --- Verification ---
+cat("\n--- Verifying the disaggregated MDER values for the USA ---\n")
+final_analysis_data %>%
+  filter(iso3 == "USA") %>%
+  select(sex, age_group, `Stratum MDER` = mder_stratum_kcal) %>%
+  arrange(desc(`Stratum MDER`)) %>%
+  print(n=100)
+
+glimpse(final_analysis_data)
 
 
 # ==========================================================================
@@ -121,7 +241,7 @@ final_results <- final_results %>%
       mean_intake = kcal_mean_medium,               # Our final CALORIE mean
       cv_intake = cv_calorie,                # The CALORIE CV we matched
       distribution_type = best_dist_calorie, # The CALORIE distribution we matched
-      requirement = eer_kcal_marco_mean    # The calorie requirement is the EER
+      requirement = mder_stratum_kcal    # The calorie requirement is the EER
     )
   ) %>%
   ungroup()
