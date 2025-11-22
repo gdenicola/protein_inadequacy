@@ -149,7 +149,7 @@ country_level_data <- all_countries_needed %>%
 calculate_waste_pct_low <- function(gdp) {
   min_waste    <- 0.00
   max_waste    <- 0.20
-  gdp_midpoint <- 20000 
+  gdp_midpoint <- 25000 
   k            <- 1
   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
   return(waste_percentage)
@@ -159,7 +159,7 @@ calculate_waste_pct_low <- function(gdp) {
 calculate_waste_pct_medium <- function(gdp) {
   min_waste    <- 0.00
   max_waste    <- 0.25
-  gdp_midpoint <- 20000
+  gdp_midpoint <- 25000
   k            <- 1
   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
   return(waste_percentage)
@@ -170,7 +170,7 @@ calculate_waste_pct_medium <- function(gdp) {
 calculate_waste_pct_high <- function(gdp) {
   min_waste    <- 0.00
   max_waste    <- 0.30
-  gdp_midpoint <- 20000 
+  gdp_midpoint <- 25000 
   k            <- 1
   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
   return(waste_percentage)
@@ -768,12 +768,14 @@ res_high   <- match_shapes_for_scenario(
   scenario_name = "high"
 )
 
+# ------------------------------------------------------------
+# Build wide (one row per iso3/sex/age) with scenario-invariant shapes from MEDIUM
+# ------------------------------------------------------------
+
+# 1) Stack all scenarios (just for kcal means)
 calories_distributions_all <- bind_rows(res_low, res_med, res_high)
 
-# Build a single wide table: one row per (iso3, sex, age_group),
-# scenario-invariant shape columns, plus 3 kcal columns (low/medium/high).
-
-# (1) Wide kcal means
+# 2) Wide kcal means: one row per (iso3, sex, age_group)
 wide_kcal <- calories_distributions_all %>%
   select(iso3, sex, age_group, waste_scenario, kcal_mean) %>%
   tidyr::pivot_wider(
@@ -782,27 +784,23 @@ wide_kcal <- calories_distributions_all %>%
     names_prefix = "kcal_mean_"
   )
 
-# (2) Scenario-invariant shape/CV (repaired at source) — keep one copy
-shape_cv_unique <- calories_distributions_all %>%
+# 3) Scenario-invariant shape/CV: TAKE FROM MEDIUM ONLY
+#    This guarantees a single row per key for the shapes.
+shape_cv_unique <- res_med %>%
   select(iso3, sex, age_group, best_dist, cv) %>%
-  distinct()
+  distinct(iso3, sex, age_group, .keep_all = TRUE)
 
-# (3) Join into final wide output
+# 4) Join shapes to means (ensures UNIQUE keys)
 final_calorie_distributions_wide <- shape_cv_unique %>%
   left_join(wide_kcal, by = c("iso3","sex","age_group"))
 
-# --- Flip kcal_mean_low and kcal_mean_high column names safely ---
-
-# Ensure the columns exist (create if missing so the swap doesn't error)
+# 5) Optional: keep your “flip” of low/high column names
 for (nm in c("kcal_mean_low", "kcal_mean_high")) {
   if (!nm %in% names(final_calorie_distributions_wide)) {
     final_calorie_distributions_wide[[nm]] <- NA_real_
   }
 }
-
-# flip low and high scenarios to signify caloric scenario instead of 
-# waste scenario with naming
-final_calorie_distributions_wide_flipped <- final_calorie_distributions_wide %>%
+final_calorie_distributions_wide <- final_calorie_distributions_wide %>%
   mutate(
     .kcal_low_tmp  = .data$kcal_mean_low,
     kcal_mean_low  = .data$kcal_mean_high,
@@ -810,8 +808,11 @@ final_calorie_distributions_wide_flipped <- final_calorie_distributions_wide %>%
   ) %>%
   select(-.kcal_low_tmp)
 
-# Overwrite the saved file with flipped names
-saveRDS(final_calorie_distributions_wide_flipped, file = "./output/final_calorie_distributions_wide.rds")
+# 6) Hard assertions: exactly one row per key
+stopifnot(!any(duplicated(final_calorie_distributions_wide[c("iso3","sex","age_group")])))
+stopifnot(nrow(final_calorie_distributions_wide) == nrow(wide_kcal))
 
-cat("✅ Saved file with flipped column names\n")
-cat("  - kcal_mean_low ↔ kcal_mean_high swapped in final_calorie_distributions_wide.rds\n")
+# 7) Save
+saveRDS(final_calorie_distributions_wide, file = "./output/final_calorie_distributions_wide.rds")
+cat("✅ Saved final_calorie_distributions_wide.rds with scenario-invariant shapes from MEDIUM and unique keys.\n")
+

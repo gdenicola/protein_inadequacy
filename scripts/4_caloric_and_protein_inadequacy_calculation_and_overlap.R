@@ -68,6 +68,28 @@ final_analysis_data <- protein_data_full %>%
     suffix = c("_protein", "_calorie") # e.g., 'cv_protein', 'cv_calorie'
   )
 
+# --- Sanity: make sure Stu's optimal thresholds are present (g/day) ---
+# They come from Script 1 -> Script 2 and should now be in the protein side.
+# Depending on column collisions, they might be either bare or suffixed with _protein.
+if (!("opt_mean_g_day" %in% names(final_analysis_data))) {
+  if ("opt_mean_g_day_protein" %in% names(final_analysis_data)) {
+    final_analysis_data <- final_analysis_data %>%
+      mutate(opt_mean_g_day = opt_mean_g_day_protein)
+  }
+}
+
+if (!("ear_mean_g_day" %in% names(final_analysis_data))) {
+  if ("ear_mean_g_day_protein" %in% names(final_analysis_data)) {
+    final_analysis_data <- final_analysis_data %>%
+      mutate(ear_mean_g_day = ear_mean_g_day_protein)
+  }
+}
+
+# Minimal assert so we fail loudly if something’s off
+stopifnot("opt_mean_g_day" %in% names(final_analysis_data))
+stopifnot("ear_mean_g_day" %in% names(final_analysis_data))
+
+
 # ==========================================================================
 # PART 3: LOAD AND PREPARE MINIMUM DIETARY ENERGY REQUIREMENT (MDER) DATA
 # ==========================================================================
@@ -200,6 +222,9 @@ stopifnot(max(abs(check_mder$diff), na.rm = TRUE) < 1e-6)
 final_analysis_data <- final_analysis_data %>%
   left_join(mder_stratum_specific, by = c("iso3","sex","age_group"))
 
+#####REMOVE 0-1 age group from the data
+final_analysis_data <- final_analysis_data %>% dplyr::filter(age_group != "0-0.99")
+
 # --- Verification ---
 cat("\n--- Verifying the disaggregated MDER values for the USA ---\n")
 final_analysis_data %>%
@@ -215,17 +240,22 @@ glimpse(final_analysis_data)
 # FINAL CALCULATIONS
 # ==========================================================================
 
-# --- Step 3: Calculate "True" Absolute Protein Intake ---
-# We de-standardize the GDD protein intake data using our final calorie estimates.
+##OPTIONAL: cap CVs at some values
+# final_analysis_data <- final_analysis_data %>%
+#   mutate(cv_calorie = pmin(cv_calorie, 0.35))   # cap extreme outliers
+# final_analysis_data <- final_analysis_data %>%
+#   mutate(cv_protein = pmin(cv_calorie, 0.45))   # cap extreme outliers
 
+
+
+# --- Step 3: Calculate "True" Absolute Protein Intake ---
 final_results <- final_analysis_data %>%
   mutate(
     # Protein provides 4 kcal/gram
     protein_grams_true = (kcal_mean_medium * protein_kcal_share_mean) / 4
   )
 
-# --- Step 4: Calculate Final Protein & Calorie Inadequacy ---
-# First, define our trusted inadequacy calculation function.
+# --- Step 4: Calculate Final Protein & Calorie Inadequacy (EAR + OPT) ---
 calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requirement) {
   if (is.na(requirement) || requirement <= 0 || is.na(mean_intake) || is.na(cv_intake) || mean_intake <= 0 || cv_intake <= 0) return(NA_real_)
   if (distribution_type == "gamma") {
@@ -234,32 +264,40 @@ calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requ
     return(pgamma(requirement, shape = shape_k, scale = scale_theta))
   } else if (distribution_type == "log-normal") {
     meanlog <- log(mean_intake) - 0.5 * log(1 + cv_intake^2); sdlog <- sqrt(log(1 + cv_intake^2))
-    if(is.na(sdlog) || sdlog <= 0) return(NA_real_)
+    if (is.na(sdlog) || sdlog <= 0) return(NA_real_)
     return(plnorm(requirement, meanlog = meanlog, sdlog = sdlog))
-  } else { return(NA_real_) }
+  } else {
+    return(NA_real_)
+  }
 }
 
-# Now, apply the function for both protein and calories.
 final_results <- final_results %>%
   rowwise() %>%
   mutate(
-    # A) Calculate PROTEIN inadequacy
-    prevalence_protein_inadequate = calculate_inadequacy(
-      mean_intake = protein_grams_true,      # Our new "true" protein mean
-      cv_intake = cv_protein,                # The original PROTEIN CV
-      distribution_type = best_dist_protein,   # The original PROTEIN distribution
-      requirement = ear_mean_g_day           # The absolute PROTEIN requirement (EAR)
+    # A) PROTEIN inadequacy — EAR (original)
+    prevalence_protein_inadequate_EAR = calculate_inadequacy(
+      mean_intake = protein_grams_true,
+      cv_intake = cv_protein,
+      distribution_type = best_dist_protein,
+      requirement = ear_mean_g_day
     ),
-    
-    # B) Calculate CALORIE inadequacy
+    # B) PROTEIN inadequacy — OPT (Stu thresholds)
+    prevalence_protein_inadequate_OPT = calculate_inadequacy(
+      mean_intake = protein_grams_true,
+      cv_intake = cv_protein,
+      distribution_type = best_dist_protein,
+      requirement = opt_mean_g_day
+    ),
+    # C) CALORIE inadequacy — MDER
     prevalence_calorie_inadequate = calculate_inadequacy(
-      mean_intake = kcal_mean_medium,               # Our final CALORIE mean
-      cv_intake = cv_calorie,                # The CALORIE CV we matched
-      distribution_type = best_dist_calorie, # The CALORIE distribution we matched
-      requirement = mder_stratum_kcal    # The calorie requirement is the MDER by group
+      mean_intake = kcal_mean_medium,
+      cv_intake = cv_calorie,
+      distribution_type = best_dist_calorie,
+      requirement = mder_stratum_kcal
     )
   ) %>%
   ungroup()
+
 
 
 # --- Step 5: Report The Grand Finale ---
@@ -267,15 +305,17 @@ final_results <- final_results %>%
 
 global_summary_final <- final_results %>%
   summarise(
-    global_protein_inadequacy = weighted.mean(prevalence_protein_inadequate, w = population, na.rm = TRUE),
-    global_calorie_inadequacy = weighted.mean(prevalence_calorie_inadequate, w = population, na.rm = TRUE)
+    global_protein_inadequacy_EAR = weighted.mean(prevalence_protein_inadequate_EAR, w = population, na.rm = TRUE),
+    global_protein_inadequacy_OPT = weighted.mean(prevalence_protein_inadequate_OPT, w = population, na.rm = TRUE),
+    global_calorie_inadequacy     = weighted.mean(prevalence_calorie_inadequate,     w = population, na.rm = TRUE)
   )
 
 cat("\n\n======================================================\n")
 cat("          THE GRAND FINALE: FINAL RESULTS\n")
 cat("======================================================\n\n")
 cat("Global Prevalence of Protein Inadequacy (True Intake):\n")
-cat(">>> ", percent(global_summary_final$global_protein_inadequacy, accuracy = 0.1), "\n\n")
+cat(">>>  EAR-based: ", percent(global_summary_final$global_protein_inadequacy_EAR, accuracy = 0.1), "\n")
+cat(">>>  OPT-based: ", percent(global_summary_final$global_protein_inadequacy_OPT, accuracy = 0.1), "\n\n")
 cat("Global Prevalence of Caloric Inadequacy (True Intake):\n")
 cat(">>> ", percent(global_summary_final$global_calorie_inadequacy, accuracy = 0.1), "\n\n")
 cat("======================================================\n")
@@ -284,4 +324,7 @@ cat("======================================================\n")
 # --- (Optional) Save the final, most complete dataset ---
 saveRDS(final_results, file = "./output/final_analysis_with_all_inadequacy.rds")
 cat("\n--- Final results object saved successfully. The work is done. ---\n")
+
+
+######
 

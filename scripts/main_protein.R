@@ -385,6 +385,27 @@ protein_ear_gdd <- tibble::tibble(
 )
 
 
+# === Optimal per-kg thresholds by GDD age group (per Stu) ===========
+# 0–0.99: use 1y value (1.2 g/kg); 1–9: 1.2; 10–19: 1.3; 20–49: 1.2; 50+: 1.4
+protein_optimal_gdd <- tibble::tibble(
+  age_group = c("0-0.99", "1-4", "5-9", "10-14", "15-19",
+                "20-24", "25-29", "30-34", "35-39", "40-44", "45-49",
+                "50-54", "55-59", "60-64", "65-69", "70-74",
+                "75-79", "80-84", "85-89", "90-94", "95-99"),
+  opt_g_per_kg = c(
+    2,      # 0-0.99 → use 1y value
+    1.2,      # 1-4
+    1.2,      # 5-9
+    1.3,      # 10-14
+    1.3,      # 15-19
+    1.2,1.2,1.2,1.2,1.2,1.2,  # 20-49
+    1.4,1.4,1.4,1.4,1.4,      # 50-74
+    1.4,1.4,1.4,1.4,1.4       # 75-99
+  )
+)
+
+
+
 
 ####now, incorporate weight data and match it 
 library(readxl)
@@ -590,146 +611,141 @@ gdd_data_with_weights <- gdd_data_with_weights %>%
   )
 
 
-#ok, now let's match RDA data to obtain absolute RDA values (in grams):
-
-# Assume 'gdd_data_with_weights' and 'protein_rda_gdd' are in your environment.
-
-# Ensure 'protein_rda_gdd' has the correct column names for joining
-# (it should already, but a good check)
-# Expected: protein_rda_gdd has 'age_group' and 'rda_g_per_kg'
-
-# Merge the EAR per kg data with your main dataset
-gdd_data_with_abs_ear <- gdd_data_with_weights %>%
-  left_join(protein_ear_gdd, by = "age_group")
-
-# Calculate absolute ear in g/day
-# We'll create ear_mean_g_day.
-# If you also have weight_low_kg and weight_high_kg and want ear ranges,
-# you can calculate ear_low_g_day and ear_high_g_day similarly.
-gdd_data_with_abs_ear <- gdd_data_with_abs_ear %>%
+# === JOIN EAR and OPT per-kg tables; compute absolute g/day (EAR + OPT) ===
+gdd_data_with_abs_req <- gdd_data_with_weights %>%
+  left_join(protein_ear_gdd,     by = "age_group") %>%   # EAR per-kg
+  left_join(protein_optimal_gdd, by = "age_group") %>%   # OPT per-kg (new)
   mutate(
+    # EAR absolute requirements (unchanged logic)
     ear_mean_g_day = ear_g_per_kg * weight_mean_kg,
-    # Optional: Calculate ear based on lower and upper body weights if available and desired
     ear_low_g_day  = ear_g_per_kg * weight_low_kg,
-    ear_high_g_day = ear_g_per_kg * weight_high_kg
+    ear_high_g_day = ear_g_per_kg * weight_high_kg,
+    # OPTIMAL absolute thresholds (new)
+    opt_mean_g_day = opt_g_per_kg * weight_mean_kg,
+    opt_low_g_day  = opt_g_per_kg * weight_low_kg,
+    opt_high_g_day = opt_g_per_kg * weight_high_kg
   )
+
+# Keep downstream code unchanged by aliasing to the old object name:
+gdd_data_with_abs_ear <- gdd_data_with_abs_req
+
 
 #now,let's calculate the proportion below ear:
 
-
-calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requirement) {
-  # Ensure requirement is not NA or negative, handle if necessary
-  if (is.na(requirement) || requirement < 0) return(NA_real_)
-  # Ensure mean_intake and cv_intake are valid
-  if (is.na(mean_intake) || is.na(cv_intake) || mean_intake <= 0 || cv_intake <= 0) return(NA_real_)
-  
-  if (distribution_type == "gamma") {
-    if (cv_intake^2 == 0) return(NA_real_) # Avoid division by zero if CV is exactly 0
-    shape_k <- 1 / (cv_intake^2)
-    scale_theta <- mean_intake / shape_k # which is mean_intake * cv_intake^2
-    p_inadequate <- pgamma(requirement, shape = shape_k, scale = scale_theta)
-  } else if (distribution_type == "log-normal") {
-    if (1 + cv_intake^2 <= 0) return(NA_real_) # log argument must be positive
-    meanlog <- log(mean_intake) - 0.5 * log(1 + cv_intake^2)
-    sdlog <- sqrt(log(1 + cv_intake^2))
-    if (is.na(sdlog) || sdlog <=0) return(NA_real_) # sdlog must be positive
-    p_inadequate <- plnorm(requirement, meanlog = meanlog, sdlog = sdlog)
-  } else {
-    # Handle unknown distribution types if any, or stop with an error
-    warning(paste("Unknown distribution type:", distribution_type))
-    p_inadequate <- NA_real_
-  }
-  return(p_inadequate)
-}
-
-# Apply this function row-wise
-gdd_inadequacy_estimates <- gdd_data_with_abs_ear %>%
-  rowwise() %>% # Process row by row
-  mutate(
-    prevalence_inadequate = calculate_inadequacy(
-      gdd_mean,         # Corresponds to mean_intake
-      cv,               # Corresponds to cv_intake
-      best_dist,        # Corresponds to distribution_type
-      ear_mean_g_day    # Corresponds to requirement
-    )
-  ) %>%
-  ungroup() # Important to ungroup after rowwise operations
-
-# Display a few rows with the new prevalence_inadequate column
-# print(head(gdd_inadequacy_estimates %>%
-#              select(iso3, sex, age_group, gdd_mean, cv, best_dist, ear_mean_g_day, prevalence_inadequate)))
-
-# (Optional) Check for NAs in the prevalence_inadequate column
-# NAs could arise if gdd_mean, cv, or ear_mean_g_day were NA, or if cv was 0 for gamma.
-# cat("NAs in prevalence_inadequate:", sum(is.na(gdd_inadequacy_estimates$prevalence_inadequate)), "\n")
-
-# (Optional) Summary of prevalence estimates
-#summary(gdd_inadequacy_estimates$prevalence_inadequate)
-
-
-######## ALL COMBINATIONS NOW (NEW/REVISED SECTION) #############
-
-cat("\n--- Calculating All 9 Sensitivity Scenarios for Prevalence of Inadequacy ---\n")
-
-# 'gdd_data_with_abs_ear' should exist and contain:
-# iso3, sex, age_group,
-# gdd_L (gdd_lower), gdd_M (gdd_mean), gdd_U (gdd_upper)
-# ear_g_per_kg
-# weight_low_kg, weight_mean_kg, weight_high_kg
-# ear_L_g_day, ear_M_g_day (central EAR), ear_H_g_day (these were calculated in gdd_data_with_abs_ear)
-# cv, best_dist
-
-# Ensure the calculate_inadequacy function is defined (it should be from your previous steps)
-# calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requirement) { ... }
-
-# Select base columns needed for creating all scenarios
-# We will use the pre-calculated ear_L_g_day, ear_M_g_day, ear_H_g_day
-base_data_for_all_scenarios <- gdd_data_with_abs_ear %>%
-  select(iso3, sex, age_group, 
-         gdd_L = gdd_lower, gdd_M = gdd_mean, gdd_U = gdd_upper,
-         # Use the EAR values that already reflect low/mean/high weight
-         ear_L = ear_low_g_day, 
-         ear_M = ear_mean_g_day, 
-         ear_H = ear_high_g_day,
-         cv, best_dist)
-
-# Reshape to long format to iterate over GDD levels and EAR levels
-sensitivity_df_long_all <- base_data_for_all_scenarios %>%
-  pivot_longer(
-    cols = starts_with("gdd_"),
-    names_to = "gdd_level_char", names_prefix = "gdd_", values_to = "scenario_gdd_intake"
-  ) %>%
-  pivot_longer(
-    cols = starts_with("ear_"), 
-    names_to = "ear_level_char", names_prefix = "ear_", values_to = "scenario_ear_g_day"
-  ) %>%
-  mutate(
-    # Scenario label combines GDD level (L,M,U) and Weight level (L,M,H - implied by EAR level)
-    scenario_label = paste0(gdd_level_char, ear_level_char) 
-  )
-
-# Calculate prevalence for each of the 9 scenarios
-# This 'sensitivity_results_all_scenarios' will have 9 rows per original stratum
-sensitivity_results_all_scenarios <- sensitivity_df_long_all %>%
-  rowwise() %>%
-  mutate(
-    scenario_prevalence_inadequate = calculate_inadequacy(
-      mean_intake = scenario_gdd_intake,
-      cv_intake = cv,
-      distribution_type = best_dist,
-      requirement = scenario_ear_g_day
-    )
-  ) %>%
-  ungroup() %>%
-  # Keep only key identifiers, scenario label, and the resulting prevalence
-  select(iso3, sex, age_group, scenario_label, scenario_prevalence_inadequate)
-
-# Check the structure of sensitivity_results_all_scenarios
-# cat("\nHead of sensitivity_results_all_scenarios:\n")
-# print(head(sensitivity_results_all_scenarios))
-# cat("\nNumber of rows in sensitivity_results_all_scenarios:", nrow(sensitivity_results_all_scenarios), "\n") # Should be GDD strata * 9
-# print(table(sensitivity_results_all_scenarios$scenario_label)) # Should show 9 scenarios, each with N rows
-
+# 
+# calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requirement) {
+#   # Ensure requirement is not NA or negative, handle if necessary
+#   if (is.na(requirement) || requirement < 0) return(NA_real_)
+#   # Ensure mean_intake and cv_intake are valid
+#   if (is.na(mean_intake) || is.na(cv_intake) || mean_intake <= 0 || cv_intake <= 0) return(NA_real_)
+#   
+#   if (distribution_type == "gamma") {
+#     if (cv_intake^2 == 0) return(NA_real_) # Avoid division by zero if CV is exactly 0
+#     shape_k <- 1 / (cv_intake^2)
+#     scale_theta <- mean_intake / shape_k # which is mean_intake * cv_intake^2
+#     p_inadequate <- pgamma(requirement, shape = shape_k, scale = scale_theta)
+#   } else if (distribution_type == "log-normal") {
+#     if (1 + cv_intake^2 <= 0) return(NA_real_) # log argument must be positive
+#     meanlog <- log(mean_intake) - 0.5 * log(1 + cv_intake^2)
+#     sdlog <- sqrt(log(1 + cv_intake^2))
+#     if (is.na(sdlog) || sdlog <=0) return(NA_real_) # sdlog must be positive
+#     p_inadequate <- plnorm(requirement, meanlog = meanlog, sdlog = sdlog)
+#   } else {
+#     # Handle unknown distribution types if any, or stop with an error
+#     warning(paste("Unknown distribution type:", distribution_type))
+#     p_inadequate <- NA_real_
+#   }
+#   return(p_inadequate)
+# }
+# 
+# # Apply this function row-wise
+# gdd_inadequacy_estimates <- gdd_data_with_abs_ear %>%
+#   rowwise() %>% # Process row by row
+#   mutate(
+#     prevalence_inadequate = calculate_inadequacy(
+#       gdd_mean,         # Corresponds to mean_intake
+#       cv,               # Corresponds to cv_intake
+#       best_dist,        # Corresponds to distribution_type
+#       ear_mean_g_day    # Corresponds to requirement
+#     )
+#   ) %>%
+#   ungroup() # Important to ungroup after rowwise operations
+# 
+# # Display a few rows with the new prevalence_inadequate column
+# # print(head(gdd_inadequacy_estimates %>%
+# #              select(iso3, sex, age_group, gdd_mean, cv, best_dist, ear_mean_g_day, prevalence_inadequate)))
+# 
+# # (Optional) Check for NAs in the prevalence_inadequate column
+# # NAs could arise if gdd_mean, cv, or ear_mean_g_day were NA, or if cv was 0 for gamma.
+# # cat("NAs in prevalence_inadequate:", sum(is.na(gdd_inadequacy_estimates$prevalence_inadequate)), "\n")
+# 
+# # (Optional) Summary of prevalence estimates
+# #summary(gdd_inadequacy_estimates$prevalence_inadequate)
+# 
+# 
+# ######## ALL COMBINATIONS NOW (NEW/REVISED SECTION) #############
+# 
+# cat("\n--- Calculating All 9 Sensitivity Scenarios for Prevalence of Inadequacy ---\n")
+# 
+# # 'gdd_data_with_abs_ear' should exist and contain:
+# # iso3, sex, age_group,
+# # gdd_L (gdd_lower), gdd_M (gdd_mean), gdd_U (gdd_upper)
+# # ear_g_per_kg
+# # weight_low_kg, weight_mean_kg, weight_high_kg
+# # ear_L_g_day, ear_M_g_day (central EAR), ear_H_g_day (these were calculated in gdd_data_with_abs_ear)
+# # cv, best_dist
+# 
+# # Ensure the calculate_inadequacy function is defined (it should be from your previous steps)
+# # calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requirement) { ... }
+# 
+# # Select base columns needed for creating all scenarios
+# # We will use the pre-calculated ear_L_g_day, ear_M_g_day, ear_H_g_day
+# base_data_for_all_scenarios <- gdd_data_with_abs_ear %>%
+#   select(iso3, sex, age_group, 
+#          gdd_L = gdd_lower, gdd_M = gdd_mean, gdd_U = gdd_upper,
+#          # Use the EAR values that already reflect low/mean/high weight
+#          ear_L = ear_low_g_day, 
+#          ear_M = ear_mean_g_day, 
+#          ear_H = ear_high_g_day,
+#          cv, best_dist)
+# 
+# # Reshape to long format to iterate over GDD levels and EAR levels
+# sensitivity_df_long_all <- base_data_for_all_scenarios %>%
+#   pivot_longer(
+#     cols = starts_with("gdd_"),
+#     names_to = "gdd_level_char", names_prefix = "gdd_", values_to = "scenario_gdd_intake"
+#   ) %>%
+#   pivot_longer(
+#     cols = starts_with("ear_"), 
+#     names_to = "ear_level_char", names_prefix = "ear_", values_to = "scenario_ear_g_day"
+#   ) %>%
+#   mutate(
+#     # Scenario label combines GDD level (L,M,U) and Weight level (L,M,H - implied by EAR level)
+#     scenario_label = paste0(gdd_level_char, ear_level_char) 
+#   )
+# 
+# # Calculate prevalence for each of the 9 scenarios
+# # This 'sensitivity_results_all_scenarios' will have 9 rows per original stratum
+# sensitivity_results_all_scenarios <- sensitivity_df_long_all %>%
+#   rowwise() %>%
+#   mutate(
+#     scenario_prevalence_inadequate = calculate_inadequacy(
+#       mean_intake = scenario_gdd_intake,
+#       cv_intake = cv,
+#       distribution_type = best_dist,
+#       requirement = scenario_ear_g_day
+#     )
+#   ) %>%
+#   ungroup() %>%
+#   # Keep only key identifiers, scenario label, and the resulting prevalence
+#   select(iso3, sex, age_group, scenario_label, scenario_prevalence_inadequate)
+# 
+# # Check the structure of sensitivity_results_all_scenarios
+# # cat("\nHead of sensitivity_results_all_scenarios:\n")
+# # print(head(sensitivity_results_all_scenarios))
+# # cat("\nNumber of rows in sensitivity_results_all_scenarios:", nrow(sensitivity_results_all_scenarios), "\n") # Should be GDD strata * 9
+# # print(table(sensitivity_results_all_scenarios$scenario_label)) # Should show 9 scenarios, each with N rows
+# 
 #loading wpp2024 for population data
 library(wpp2024)
 library(countrycode)
@@ -737,7 +753,7 @@ library(countrycode)
 # --- POPULATION DATA PROCESSING ---
 cat("\n5. Loading and preparing population data...\n")
 # Ensure popAge1dt is loaded if not already
-if (!exists("popAge1dt")) { data(popAge1dt) } 
+if (!exists("popAge1dt")) { data(popAge1dt) }
 pop2018_dt <- popAge1dt[year == 2018] # data.table filter
 pop2018_dt[, iso3 := countrycode(sourcevar = country_code, origin = "un", destination = "iso3c", nomatch = NA_character_)]
 if (any(pop2018_dt$country_code == 158 & is.na(pop2018_dt$iso3))) { pop2018_dt[country_code == 158, iso3 := "TWN"]; cat("Fixed TWN.\n")}
@@ -764,238 +780,237 @@ population_aggregated_tbl <- population_long_tbl %>%
   group_by(iso3, sex, age_group) %>%
   summarise(population = sum(population_thousands, na.rm = TRUE) * 1000, .groups = "drop")
 
+# 
+# # --- COMBINE ALL SCENARIO PREVALENCES WITH POPULATION & CALCULATE COUNTS ---
+# cat("\n6. Combining all scenario prevalences with population and calculating counts...\n")
+# # Join the population data to the long sensitivity_results dataframe
+# gdd_data_with_population_all_scenarios <- sensitivity_results_all_scenarios %>%
+#   left_join(population_aggregated_tbl, by = c("iso3", "sex", "age_group")) %>%
+#   # Optionally, add original_country_name here if needed for detailed scenario outputs
+#   left_join(population_data_iso3_tbl %>% distinct(iso3, original_country_name), by="iso3")
+# 
+# 
+# gdd_counts_inadequate_all_scenarios <- gdd_data_with_population_all_scenarios %>%
+#   mutate(inadequate_count_scenario = scenario_prevalence_inadequate * population) %>%
+#   # Filter out rows where population might be NA (if an iso3/sex/age in sensitivity_results wasn't in pop_aggregated)
+#   # or where scenario_prevalence_inadequate is NA
+#   filter(!is.na(inadequate_count_scenario), !is.na(population))
+# 
+# 
+# # --- GENERATE SUMMARIES (OVERALL, BY SEX, BY AGE from all scenarios) ---
+# cat("\n7. Generating summaries (overall, by sex, by age)...\n")
+# 
+# # Overall Global Summary (Central MM, Min, Max from 9 scenarios)
+# # First, get totals for each of the 9 scenarios
+# global_summary_per_scenario <- gdd_counts_inadequate_all_scenarios %>%
+#   group_by(scenario_label) %>%
+#   summarise(
+#     total_population_global_scenario = sum(population, na.rm = TRUE), # Sum pop for strata in this scenario
+#     total_inadequate_global_scenario = sum(inadequate_count_scenario, na.rm = TRUE),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     percent_inadequate_global_scenario = ifelse(total_population_global_scenario > 0,
+#                                                 total_inadequate_global_scenario / total_population_global_scenario, 0)
+#   )
+# cat("\n--- Global Summary of Protein Inadequacy for EACH of 9 Scenarios (EAR-based, 2018) ---\n")
+# print(global_summary_per_scenario)
+# 
+# 
+# # Then, from these 9 global scenario totals, extract the MM, overall Min, and overall Max
+# global_summary_overall_bounds <- global_summary_per_scenario %>%
+#   summarise(
+#     total_population_covered = first(total_population_global_scenario), # Should be the same total pop for all GDD strata
+#     central_estimate_inadequate_count = total_inadequate_global_scenario[scenario_label == "MM"],
+#     min_estimate_inadequate_count = min(total_inadequate_global_scenario, na.rm = TRUE),
+#     max_estimate_inadequate_count = max(total_inadequate_global_scenario, na.rm = TRUE),
+#     .groups = "drop" # Added .groups = "drop"
+#   ) %>%
+#   mutate(
+#     central_estimate_percent = ifelse(total_population_covered > 0, central_estimate_inadequate_count / total_population_covered * 100, 0),
+#     min_estimate_percent = ifelse(total_population_covered > 0, min_estimate_inadequate_count / total_population_covered * 100, 0),
+#     max_estimate_percent = ifelse(total_population_covered > 0, max_estimate_inadequate_count / total_population_covered * 100, 0)
+#   )
+# cat("\n--- Overall Global Summary (Central MM, Min, Max derived from 9 Scenarios) ---\n")
+# print(global_summary_overall_bounds)
+# 
+# 
+# # Global Summary by Sex (Central MM, Min, Max from 9 scenarios)
+# global_summary_by_sex_per_scenario <- gdd_counts_inadequate_all_scenarios %>%
+#   group_by(sex, scenario_label) %>%
+#   summarise(
+#     total_population_by_sex_scenario = sum(population, na.rm = TRUE),
+#     total_inadequate_by_sex_scenario = sum(inadequate_count_scenario, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# # From these, extract MM, overall Min, Max for each sex
+# global_summary_by_sex_bounds <- global_summary_by_sex_per_scenario %>%
+#   group_by(sex) %>%
+#   summarise(
+#     total_population_by_sex = first(total_population_by_sex_scenario), # Total pop for this sex
+#     central_inadequate_count = total_inadequate_by_sex_scenario[scenario_label == "MM"],
+#     min_inadequate_count = min(total_inadequate_by_sex_scenario, na.rm=TRUE),
+#     max_inadequate_count = max(total_inadequate_by_sex_scenario, na.rm=TRUE),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     central_percent = ifelse(total_population_by_sex > 0, central_inadequate_count / total_population_by_sex * 100, 0),
+#     min_percent = ifelse(total_population_by_sex > 0, min_inadequate_count / total_population_by_sex * 100, 0),
+#     max_percent = ifelse(total_population_by_sex > 0, max_inadequate_count / total_population_by_sex * 100, 0)
+#   )
+# cat("\n\n--- Global Summary by Sex (Central MM, Min, Max from 9 Scenarios) ---\n")
+# print(global_summary_by_sex_bounds)
+# 
+# 
+# # Global Summary by Age Group (All 9 scenarios for plotting)
+# age_group_levels_ordered <- c("0-0.99", "1-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80-84", "85-89", "90-94", "95-99")
+# summary_by_age_all_scenarios <- gdd_counts_inadequate_all_scenarios %>%
+#   mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered)) %>%
+#   group_by(age_group_f, scenario_label) %>%
+#   summarise(
+#     age_total_population_scenario = sum(population, na.rm = TRUE),
+#     age_inadequate_scenario = sum(inadequate_count_scenario, na.rm = TRUE),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     age_percent_inadequate_scenario = ifelse(age_total_population_scenario > 0, age_inadequate_scenario / age_total_population_scenario, 0)
+#   ) %>%
+#   filter(!is.na(age_group_f)) %>% 
+#   arrange(age_group_f, scenario_label)
+# cat("\n--- Global Prevalence of Inadequacy by Age Group (All 9 Scenarios, showing head) ---\n")
+# print(head(summary_by_age_all_scenarios %>% select(age_group_f, scenario_label, age_percent_inadequate_scenario)))
+# 
 
-# --- COMBINE ALL SCENARIO PREVALENCES WITH POPULATION & CALCULATE COUNTS ---
-cat("\n6. Combining all scenario prevalences with population and calculating counts...\n")
-# Join the population data to the long sensitivity_results dataframe
-gdd_data_with_population_all_scenarios <- sensitivity_results_all_scenarios %>%
-  left_join(population_aggregated_tbl, by = c("iso3", "sex", "age_group")) %>%
-  # Optionally, add original_country_name here if needed for detailed scenario outputs
-  left_join(population_data_iso3_tbl %>% distinct(iso3, original_country_name), by="iso3")
-
-
-gdd_counts_inadequate_all_scenarios <- gdd_data_with_population_all_scenarios %>%
-  mutate(inadequate_count_scenario = scenario_prevalence_inadequate * population) %>%
-  # Filter out rows where population might be NA (if an iso3/sex/age in sensitivity_results wasn't in pop_aggregated)
-  # or where scenario_prevalence_inadequate is NA
-  filter(!is.na(inadequate_count_scenario), !is.na(population))
-
-
-# --- GENERATE SUMMARIES (OVERALL, BY SEX, BY AGE from all scenarios) ---
-cat("\n7. Generating summaries (overall, by sex, by age)...\n")
-
-# Overall Global Summary (Central MM, Min, Max from 9 scenarios)
-# First, get totals for each of the 9 scenarios
-global_summary_per_scenario <- gdd_counts_inadequate_all_scenarios %>%
-  group_by(scenario_label) %>%
-  summarise(
-    total_population_global_scenario = sum(population, na.rm = TRUE), # Sum pop for strata in this scenario
-    total_inadequate_global_scenario = sum(inadequate_count_scenario, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    percent_inadequate_global_scenario = ifelse(total_population_global_scenario > 0,
-                                                total_inadequate_global_scenario / total_population_global_scenario, 0)
-  )
-cat("\n--- Global Summary of Protein Inadequacy for EACH of 9 Scenarios (EAR-based, 2018) ---\n")
-print(global_summary_per_scenario)
-
-
-# Then, from these 9 global scenario totals, extract the MM, overall Min, and overall Max
-global_summary_overall_bounds <- global_summary_per_scenario %>%
-  summarise(
-    total_population_covered = first(total_population_global_scenario), # Should be the same total pop for all GDD strata
-    central_estimate_inadequate_count = total_inadequate_global_scenario[scenario_label == "MM"],
-    min_estimate_inadequate_count = min(total_inadequate_global_scenario, na.rm = TRUE),
-    max_estimate_inadequate_count = max(total_inadequate_global_scenario, na.rm = TRUE),
-    .groups = "drop" # Added .groups = "drop"
-  ) %>%
-  mutate(
-    central_estimate_percent = ifelse(total_population_covered > 0, central_estimate_inadequate_count / total_population_covered * 100, 0),
-    min_estimate_percent = ifelse(total_population_covered > 0, min_estimate_inadequate_count / total_population_covered * 100, 0),
-    max_estimate_percent = ifelse(total_population_covered > 0, max_estimate_inadequate_count / total_population_covered * 100, 0)
-  )
-cat("\n--- Overall Global Summary (Central MM, Min, Max derived from 9 Scenarios) ---\n")
-print(global_summary_overall_bounds)
-
-
-# Global Summary by Sex (Central MM, Min, Max from 9 scenarios)
-global_summary_by_sex_per_scenario <- gdd_counts_inadequate_all_scenarios %>%
-  group_by(sex, scenario_label) %>%
-  summarise(
-    total_population_by_sex_scenario = sum(population, na.rm = TRUE),
-    total_inadequate_by_sex_scenario = sum(inadequate_count_scenario, na.rm = TRUE),
-    .groups = "drop"
-  )
-# From these, extract MM, overall Min, Max for each sex
-global_summary_by_sex_bounds <- global_summary_by_sex_per_scenario %>%
-  group_by(sex) %>%
-  summarise(
-    total_population_by_sex = first(total_population_by_sex_scenario), # Total pop for this sex
-    central_inadequate_count = total_inadequate_by_sex_scenario[scenario_label == "MM"],
-    min_inadequate_count = min(total_inadequate_by_sex_scenario, na.rm=TRUE),
-    max_inadequate_count = max(total_inadequate_by_sex_scenario, na.rm=TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    central_percent = ifelse(total_population_by_sex > 0, central_inadequate_count / total_population_by_sex * 100, 0),
-    min_percent = ifelse(total_population_by_sex > 0, min_inadequate_count / total_population_by_sex * 100, 0),
-    max_percent = ifelse(total_population_by_sex > 0, max_inadequate_count / total_population_by_sex * 100, 0)
-  )
-cat("\n\n--- Global Summary by Sex (Central MM, Min, Max from 9 Scenarios) ---\n")
-print(global_summary_by_sex_bounds)
-
-
-# Global Summary by Age Group (All 9 scenarios for plotting)
-age_group_levels_ordered <- c("0-0.99", "1-4", "5-9", "10-14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80-84", "85-89", "90-94", "95-99")
-summary_by_age_all_scenarios <- gdd_counts_inadequate_all_scenarios %>%
-  mutate(age_group_f = factor(age_group, levels = age_group_levels_ordered)) %>%
-  group_by(age_group_f, scenario_label) %>%
-  summarise(
-    age_total_population_scenario = sum(population, na.rm = TRUE),
-    age_inadequate_scenario = sum(inadequate_count_scenario, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    age_percent_inadequate_scenario = ifelse(age_total_population_scenario > 0, age_inadequate_scenario / age_total_population_scenario, 0)
-  ) %>%
-  filter(!is.na(age_group_f)) %>% 
-  arrange(age_group_f, scenario_label)
-cat("\n--- Global Prevalence of Inadequacy by Age Group (All 9 Scenarios, showing head) ---\n")
-print(head(summary_by_age_all_scenarios %>% select(age_group_f, scenario_label, age_percent_inadequate_scenario)))
-
-
-# --- 8. VISUALIZATIONS (Modified to use the new structures) ---
-cat("\n8. Generating visualizations...\n")
-
-# Plot 1: Global Prevalence (Point with Error Bar using overall Min/Max from 9 scenarios)
-plot_global_prevalence_revised <- ggplot(global_summary_overall_bounds, aes(x = "Global Estimate")) +
-  geom_point(aes(y = central_estimate_percent / 100), color = "dodgerblue3", size = 4, shape = 18) +
-  geom_errorbar(aes(ymin = min_estimate_percent / 100, ymax = max_estimate_percent / 100),
-                width = 0.1, linewidth = 0.8, color = "gray50") +
-  geom_text(aes(y = central_estimate_percent / 100, label = sprintf("%.1f%%", central_estimate_percent)),
-            vjust = -1.5, size = 4.5, color = "black", fontface = "bold") +
-  geom_text(aes(y = min_estimate_percent / 100, label = sprintf("%.1f%%\n(Min)", min_estimate_percent)),
-            vjust = 1.5, size = 3.5, color = "gray30", lineheight = 0.8) +
-  geom_text(aes(y = max_estimate_percent / 100, label = sprintf("%.1f%%\n(Max)", max_estimate_percent)),
-            vjust = -0.8, size = 3.5, color = "gray30", lineheight = 0.8) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     limits = c(0, NA), # Auto adjust upper limit based on data
-                     expand = expansion(mult = c(0.05, 0.15))) + # Add some padding
-  labs(title = "Global Prevalence of Inadequate Protein Intake",
-       subtitle = "Central estimate with overall range from 9 sensitivity scenarios", x = "", y = "Prevalence of Inadequacy") +
-  theme_minimal(base_size = 14) +
-  theme(axis.text.x = element_text(size=12, face="bold"), axis.ticks.x = element_blank(),
-        panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
-print(plot_global_prevalence_revised)
-
-
-# Plot 2: Global Prevalence by Sex (Points with Error Bars using overall Min/Max by sex)
-plot_global_prevalence_sex_revised <- ggplot(global_summary_by_sex_bounds,
-                                             aes(x = sex, y = central_percent / 100, color = sex)) +
-  geom_point(size = 4, shape = 18, show.legend = FALSE) +
-  geom_errorbar(aes(ymin = min_percent / 100, ymax = max_percent / 100),
-                width = 0.15, linewidth = 0.8, show.legend = FALSE) +
-  geom_text(aes(label = sprintf("%.1f%%", central_percent)),
-            vjust = -1.8, size = 4, color = "black", fontface="bold", show.legend = FALSE) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     limits = c(0, NA), # Auto adjust upper limit
-                     expand = expansion(mult = c(0.05, 0.15))) +
-  scale_color_brewer(palette = "Set1") +
-  labs(title = "Global Prevalence of Inadequate Protein Intake by Sex",
-       subtitle = "Central estimate with overall range from 9 sensitivity scenarios", x = "Sex", y = "Prevalence of Inadequacy") +
-  theme_minimal(base_size = 14) +
-  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
-print(plot_global_prevalence_sex_revised)
-
-
-
-# --- Plot 3: Global Prevalence by Age Group (Modified for MM black/bold, others grey) ---
-# (summary_by_age_all_scenarios and age_group_levels_ordered should already be defined)
-
-plot_age_prevalence_all_scenarios_revised <- ggplot(summary_by_age_all_scenarios, 
-                                            aes(x = age_group_f, y = age_percent_inadequate_scenario, 
-                                                group = scenario_label)) + # Group by scenario_label for all lines
-  
-  # Plot all 8 non-MM scenarios as grey lines first (background)
-  geom_line(data = . %>% filter(scenario_label != "MM"), # Use '.' placeholder for data being piped
-            aes(color = "Other Scenarios"), # Assign a dummy color name for legend control
-            linewidth = 0.6, alpha = 0.4) +
-  
-  # Optional: Add points for the grey lines if desired (can be busy)
-  # geom_point(data = . %>% filter(scenario_label != "MM"), 
-  #            alpha = 0.4, size = 1, color = "grey50") +
-
-  # Highlight the MM (central) scenario line in black and bold
-  geom_line(data = . %>% filter(scenario_label == "MM"),
-            aes(color = "Central Estimate"), # Assign a dummy color name for legend
-            linewidth = 1.2) + # Bolder line
-  geom_point(data = . %>% filter(scenario_label == "MM"),
-             aes(color = "Central Estimate"), # Match color for legend
-             size = 2.5, show.legend = FALSE) + # Don't show legend for points if line has it
-  
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), 
-                     limits = c(0, NA), # Auto adjust upper limit
-                     expand = expansion(mult = c(0, 0.05))) + # Padding
-  
-  # Manually define colors for the two groups we created in aes(color=...)
-  scale_color_manual(name = "Scenario Type", 
-                     values = c("Central Estimate" = "black", 
-                                "Other Scenarios" = "grey60")) +
-  
-  labs(
-    title = "Global Prevalence of Inadequate Protein Intake by Age Group",
-    subtitle = "Central estimate highlighted; other 8 sensitivity scenarios in grey",
-    x = "Age Group",
-    y = "Prevalence of Inadequacy"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
-        legend.position = "top", # Or "bottom", "right"
-        legend.title = element_text(face = "bold"))
-
-print(plot_age_prevalence_all_scenarios_revised)
-
-
-# Plot 4: Number of People Affected (Stacked Bar Chart - Central Estimate MM)
-# (Ensure broad_age_map is defined as in your script)
-broad_age_map <- tibble(
-  age_group = age_group_levels_ordered,
-  broad_age_category = case_when(
-    age_group %in% c("0-0.99", "1-4") ~ "0-4 Years",
-    age_group %in% c("5-9", "10-14") ~ "5-14 Years",
-    age_group %in% c("15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49") ~ "15-49 Years",
-    age_group %in% c("50-54", "55-59", "60-64", "65-69") ~ "50-69 Years", 
-    TRUE ~ "70+ Years"
-  )) %>% 
-  mutate(broad_age_category = factor(broad_age_category, 
-                                     levels = c("0-4 Years", "5-14 Years", "15-49 Years", "50-69 Years", "70+ Years")))
-
-counts_by_broad_age_sex_MM <- gdd_counts_inadequate_all_scenarios %>%
-  filter(scenario_label == "MM") %>% # Filter for the central MM scenario
-  left_join(broad_age_map, by = "age_group") %>%
-  filter(!is.na(broad_age_category)) %>% 
-  group_by(broad_age_category, sex) %>%
-  summarise(
-    total_inadequate_MM = sum(inadequate_count_scenario, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-plot_stacked_bar_counts_MM <- ggplot(counts_by_broad_age_sex_MM, 
-                                     aes(x = sex, y = total_inadequate_MM, fill = broad_age_category)) +
-  geom_col(position = "stack", alpha = 0.8) +
-  scale_y_continuous(labels = scales::label_number(scale = 1e-6, suffix = " M", accuracy=1)) +
-  scale_fill_viridis_d(option = "plasma", name = "Age Category", direction = -1) +
-  labs(
-    title = "Global Number of People with Inadequate Protein Intake",
-    subtitle = "By Sex and Broad Age Category",
-    x = "Sex",
-    y = "Number of People with Inadequate Intake (Millions)"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "top")
-print(plot_stacked_bar_counts_MM)
-
+# # --- 8. VISUALIZATIONS (Modified to use the new structures) ---
+# cat("\n8. Generating visualizations...\n")
+# 
+# # Plot 1: Global Prevalence (Point with Error Bar using overall Min/Max from 9 scenarios)
+# plot_global_prevalence_revised <- ggplot(global_summary_overall_bounds, aes(x = "Global Estimate")) +
+#   geom_point(aes(y = central_estimate_percent / 100), color = "dodgerblue3", size = 4, shape = 18) +
+#   geom_errorbar(aes(ymin = min_estimate_percent / 100, ymax = max_estimate_percent / 100),
+#                 width = 0.1, linewidth = 0.8, color = "gray50") +
+#   geom_text(aes(y = central_estimate_percent / 100, label = sprintf("%.1f%%", central_estimate_percent)),
+#             vjust = -1.5, size = 4.5, color = "black", fontface = "bold") +
+#   geom_text(aes(y = min_estimate_percent / 100, label = sprintf("%.1f%%\n(Min)", min_estimate_percent)),
+#             vjust = 1.5, size = 3.5, color = "gray30", lineheight = 0.8) +
+#   geom_text(aes(y = max_estimate_percent / 100, label = sprintf("%.1f%%\n(Max)", max_estimate_percent)),
+#             vjust = -0.8, size = 3.5, color = "gray30", lineheight = 0.8) +
+#   scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+#                      limits = c(0, NA), # Auto adjust upper limit based on data
+#                      expand = expansion(mult = c(0.05, 0.15))) + # Add some padding
+#   labs(title = "Global Prevalence of Inadequate Protein Intake",
+#        subtitle = "Central estimate with overall range from 9 sensitivity scenarios", x = "", y = "Prevalence of Inadequacy") +
+#   theme_minimal(base_size = 14) +
+#   theme(axis.text.x = element_text(size=12, face="bold"), axis.ticks.x = element_blank(),
+#         panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+# print(plot_global_prevalence_revised)
+# 
+# 
+# # Plot 2: Global Prevalence by Sex (Points with Error Bars using overall Min/Max by sex)
+# plot_global_prevalence_sex_revised <- ggplot(global_summary_by_sex_bounds,
+#                                              aes(x = sex, y = central_percent / 100, color = sex)) +
+#   geom_point(size = 4, shape = 18, show.legend = FALSE) +
+#   geom_errorbar(aes(ymin = min_percent / 100, ymax = max_percent / 100),
+#                 width = 0.15, linewidth = 0.8, show.legend = FALSE) +
+#   geom_text(aes(label = sprintf("%.1f%%", central_percent)),
+#             vjust = -1.8, size = 4, color = "black", fontface="bold", show.legend = FALSE) +
+#   scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+#                      limits = c(0, NA), # Auto adjust upper limit
+#                      expand = expansion(mult = c(0.05, 0.15))) +
+#   scale_color_brewer(palette = "Set1") +
+#   labs(title = "Global Prevalence of Inadequate Protein Intake by Sex",
+#        subtitle = "Central estimate with overall range from 9 sensitivity scenarios", x = "Sex", y = "Prevalence of Inadequacy") +
+#   theme_minimal(base_size = 14) +
+#   theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+# print(plot_global_prevalence_sex_revised)
+# 
+# 
+# 
+# # --- Plot 3: Global Prevalence by Age Group (Modified for MM black/bold, others grey) ---
+# # (summary_by_age_all_scenarios and age_group_levels_ordered should already be defined)
+# 
+# plot_age_prevalence_all_scenarios_revised <- ggplot(summary_by_age_all_scenarios, 
+#                                             aes(x = age_group_f, y = age_percent_inadequate_scenario, 
+#                                                 group = scenario_label)) + # Group by scenario_label for all lines
+#   
+#   # Plot all 8 non-MM scenarios as grey lines first (background)
+#   geom_line(data = . %>% filter(scenario_label != "MM"), # Use '.' placeholder for data being piped
+#             aes(color = "Other Scenarios"), # Assign a dummy color name for legend control
+#             linewidth = 0.6, alpha = 0.4) +
+#   
+#   # Optional: Add points for the grey lines if desired (can be busy)
+#   # geom_point(data = . %>% filter(scenario_label != "MM"), 
+#   #            alpha = 0.4, size = 1, color = "grey50") +
+# 
+#   # Highlight the MM (central) scenario line in black and bold
+#   geom_line(data = . %>% filter(scenario_label == "MM"),
+#             aes(color = "Central Estimate"), # Assign a dummy color name for legend
+#             linewidth = 1.2) + # Bolder line
+#   geom_point(data = . %>% filter(scenario_label == "MM"),
+#              aes(color = "Central Estimate"), # Match color for legend
+#              size = 2.5, show.legend = FALSE) + # Don't show legend for points if line has it
+#   
+#   scale_y_continuous(labels = scales::percent_format(accuracy = 1), 
+#                      limits = c(0, NA), # Auto adjust upper limit
+#                      expand = expansion(mult = c(0, 0.05))) + # Padding
+#   
+#   # Manually define colors for the two groups we created in aes(color=...)
+#   scale_color_manual(name = "Scenario Type", 
+#                      values = c("Central Estimate" = "black", 
+#                                 "Other Scenarios" = "grey60")) +
+#   
+#   labs(
+#     title = "Global Prevalence of Inadequate Protein Intake by Age Group",
+#     subtitle = "Central estimate highlighted; other 8 sensitivity scenarios in grey",
+#     x = "Age Group",
+#     y = "Prevalence of Inadequacy"
+#   ) +
+#   theme_minimal(base_size = 14) +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+#         legend.position = "top", # Or "bottom", "right"
+#         legend.title = element_text(face = "bold"))
+# 
+# print(plot_age_prevalence_all_scenarios_revised)
+# 
+# 
+# # Plot 4: Number of People Affected (Stacked Bar Chart - Central Estimate MM)
+# # (Ensure broad_age_map is defined as in your script)
+# broad_age_map <- tibble(
+#   age_group = age_group_levels_ordered,
+#   broad_age_category = case_when(
+#     age_group %in% c("0-0.99", "1-4") ~ "0-4 Years",
+#     age_group %in% c("5-9", "10-14") ~ "5-14 Years",
+#     age_group %in% c("15-19", "20-24", "25-29", "30-34", "35-39", "40-44", "45-49") ~ "15-49 Years",
+#     age_group %in% c("50-54", "55-59", "60-64", "65-69") ~ "50-69 Years", 
+#     TRUE ~ "70+ Years"
+#   )) %>% 
+#   mutate(broad_age_category = factor(broad_age_category, 
+#                                      levels = c("0-4 Years", "5-14 Years", "15-49 Years", "50-69 Years", "70+ Years")))
+# 
+# counts_by_broad_age_sex_MM <- gdd_counts_inadequate_all_scenarios %>%
+#   filter(scenario_label == "MM") %>% # Filter for the central MM scenario
+#   left_join(broad_age_map, by = "age_group") %>%
+#   filter(!is.na(broad_age_category)) %>% 
+#   group_by(broad_age_category, sex) %>%
+#   summarise(
+#     total_inadequate_MM = sum(inadequate_count_scenario, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+# 
+# plot_stacked_bar_counts_MM <- ggplot(counts_by_broad_age_sex_MM, 
+#                                      aes(x = sex, y = total_inadequate_MM, fill = broad_age_category)) +
+#   geom_col(position = "stack", alpha = 0.8) +
+#   scale_y_continuous(labels = scales::label_number(scale = 1e-6, suffix = " M", accuracy=1)) +
+#   scale_fill_viridis_d(option = "plasma", name = "Age Category", direction = -1) +
+#   labs(
+#     title = "Global Number of People with Inadequate Protein Intake",
+#     subtitle = "By Sex and Broad Age Category",
+#     x = "Sex",
+#     y = "Number of People with Inadequate Intake (Millions)"
+#   ) +
+#   theme_minimal(base_size = 14) +
+#   theme(legend.position = "top")
+# print(plot_stacked_bar_counts_MM)
 
 
 # SAVE THE PRE-PROCESSED DATA BEFORE "FLAWED" INADEQUACY CALCULATION

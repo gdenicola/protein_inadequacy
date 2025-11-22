@@ -338,19 +338,30 @@ calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requ
   } else { NA_real_ }
 }
 
+# --- Step 4: Calculate Protein Inadequacy (EAR and OPTIMAL) ---
+cat("\n--- Calculating prevalence of protein inadequacy (EAR & OPTIMAL)... ---\n")
+
 optimal_calories_results <- optimal_calories_data %>%
   rowwise() %>%
   mutate(
-    prevalence_inadequate_optimal = calculate_inadequacy(
+    # (A) standard EAR-based inadequacy
+    prevalence_inadequate_EAR = calculate_inadequacy(
       mean_intake = protein_grams_optimal,
       cv_intake = cv,
       distribution_type = best_dist,
-      requirement = ear_mean_g_day # This comes from your original prepped_data
+      requirement = ear_mean_g_day
+    ),
+    # (B) "optimal" inadequacy per Stu thresholds
+    prevalence_inadequate_OPT = calculate_inadequacy(
+      mean_intake = protein_grams_optimal,
+      cv_intake = cv,
+      distribution_type = best_dist,
+      requirement = opt_mean_g_day   # <-- new variable from script 1
     )
   ) %>%
   ungroup()
 
-cat("--- Inadequacy calculation complete. 'optimal_calories_results' created. ---\n")
+cat("--- Inadequacy calculation complete (EAR & OPTIMAL). ---\n")
 
 
 # --- Step 5: Summarize and Display the Final Result ---
@@ -358,29 +369,32 @@ cat("\n--- Final Summary for 'Optimal Calories' Scenario ---\n")
 
 global_summary_optimal <- optimal_calories_results %>%
   summarise(
-    global_prevalence_optimal = weighted.mean(prevalence_inadequate_optimal, w = population, na.rm = TRUE)
+    global_inad_EAR = weighted.mean(prevalence_inadequate_EAR, w = population, na.rm = TRUE),
+    global_inad_OPT = weighted.mean(prevalence_inadequate_OPT, w = population, na.rm = TRUE)
   )
 
-# We can also generate the summary by sex, which is often insightful.
 summary_by_sex_optimal <- optimal_calories_results %>%
   group_by(sex) %>%
   summarise(
-    prevalence = weighted.mean(prevalence_inadequate_optimal, w = population, na.rm = TRUE)
+    inad_EAR = weighted.mean(prevalence_inadequate_EAR, w = population, na.rm = TRUE),
+    inad_OPT = weighted.mean(prevalence_inadequate_OPT, w = population, na.rm = TRUE)
   ) %>%
-  mutate(prevalence_pct = scales::percent(prevalence, accuracy = 0.1))
-
-
-# --- Step 6: Display Final Results ---
+  mutate(
+    EAR_pct = scales::percent(inad_EAR, accuracy = 0.1),
+    OPT_pct = scales::percent(inad_OPT, accuracy = 0.1)
+  )
 
 cat("\n=======================================================================\n")
 cat("          FINAL RESULT: OPTIMAL CALORIES SCENARIO\n")
 cat("=======================================================================\n")
-cat("Global prevalence of protein inadequacy if everyone met their caloric EER:\n")
-cat(">>> ", scales::percent(global_summary_optimal$global_prevalence_optimal, accuracy = 0.1), "\n")
+cat("Global prevalence of protein inadequacy:\n")
+cat(">>>  EAR-based: ", scales::percent(global_summary_optimal$global_inad_EAR, accuracy = 0.1), "\n")
+cat(">>>  OPTIMAL-based (Stu): ", scales::percent(global_summary_optimal$global_inad_OPT, accuracy = 0.1), "\n")
 cat("=======================================================================\n\n")
 
 cat("--- Breakdown by Sex ---\n")
 print(summary_by_sex_optimal)
+
 
 
 
