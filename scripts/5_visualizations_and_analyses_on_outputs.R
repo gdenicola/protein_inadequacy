@@ -526,4 +526,51 @@ print(
                   ~ scales::percent(.x, accuracy = 0.1)))
 )
 
+
+
+# ---- Helper to save ggplots to ../plots ----
+save_plot <- function(plot, filename, width = 8, height = 6, dpi = 300) {
+  out_dir <- file.path(getwd(), "plots")
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+  filepath <- file.path(out_dir, paste0(filename, ".png"))
+  ggsave(filepath, plot = plot, width = width, height = height, dpi = dpi)
+  message("✅ Saved: ", filepath)
+}
+
+
+save_plot(plot_exact_EAR, "ribbon_exact_EAR")
+save_plot(plot_exact_OPT, "ribbon_exact_OPT")
+
+save_plot(plot_prot_EAR, "ribbon_prot_EAR")
+save_plot(plot_prot_OPT, "ribbon_prot_OPT")
+save_plot(plot_cal, "ribbon_calorie")
+
+save_plot(plot_box_by_sex, "box_by_sex")
+
+save_plot(plot_cat6_map(map_df_exact, "cat6_prot_EAR_exact",
+                        "Protein Inadequacy (EAR) — Optimal-Calorie World"),
+          "map_protein_EAR_optcal")
+save_plot(plot_cat6_map(map_df_exact, "cat6_prot_OPT_exact",
+                        "Protein Inadequacy (OPT) — Optimal-Calorie World"),
+          "map_protein_OPT_optcal")
+
+save_plot(plot_cat6_map(map_df, "cat6_prot_EAR",
+                        "Protein Inadequacy (EAR) — MM scenario"),
+          "map_protein_EAR_MM")
+save_plot(plot_cat6_map(map_df, "cat6_prot_OPT",
+                        "Protein Inadequacy (OPT) — MM scenario"),
+          "map_protein_OPT_MM")
+save_plot(plot_cat6_map(map_df, "cat6_cal_MD",
+                        "Calorie Inadequacy (MDER) — MM scenario"),
+          "map_calorie_MM")
+
+save_plot(compare_map_df(map_df, "prot_EAR",
+                         "Protein (EAR) vs Calories — Difference Map (MM scenario)"),
+          "diffmap_EAR_vs_calories")
+save_plot(compare_map_df(map_df, "prot_OPT",
+                         "Protein (OPT) vs Calories — Difference Map (MM scenario)"),
+          "diffmap_OPT_vs_calories")
+
+
+
 cat("\n✅ Script 5 finished: optimal-calorie-world maps first; new neutral 3-color palette for difference maps.\n")
