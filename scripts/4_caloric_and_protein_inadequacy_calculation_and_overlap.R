@@ -310,6 +310,17 @@ global_summary_final <- final_results %>%
     global_calorie_inadequacy     = weighted.mean(prevalence_calorie_inadequate,     w = population, na.rm = TRUE)
   )
 
+# --- NEW: Global population-weighted averages by sex ---
+global_summary_by_sex <- final_results %>%
+  group_by(sex) %>%
+  summarise(
+    global_protein_inadequacy_EAR = weighted.mean(prevalence_protein_inadequate_EAR, w = population, na.rm = TRUE),
+    global_protein_inadequacy_OPT = weighted.mean(prevalence_protein_inadequate_OPT, w = population, na.rm = TRUE),
+    global_calorie_inadequacy     = weighted.mean(prevalence_calorie_inadequate,     w = population, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
 cat("\n\n======================================================\n")
 cat("          THE GRAND FINALE: FINAL RESULTS\n")
 cat("======================================================\n\n")
@@ -321,10 +332,61 @@ cat(">>> ", percent(global_summary_final$global_calorie_inadequacy, accuracy = 0
 cat("======================================================\n")
 
 
+# --- NEW: Print by-sex results ---
+cat("\nBy-sex global prevalences (population-weighted):\n")
+global_summary_by_sex %>%
+  mutate(
+    across(c(global_protein_inadequacy_EAR,
+             global_protein_inadequacy_OPT,
+             global_calorie_inadequacy),
+           ~ scales::percent(.x, accuracy = 0.1))
+  ) %>%
+  arrange(sex) %>%
+  {
+    for (i in seq_len(nrow(.))) {
+      cat("\nSex:", .$sex[i], "\n")
+      cat("  Protein inadequacy (EAR): ", .$global_protein_inadequacy_EAR[i], "\n")
+      cat("  Protein inadequacy (OPT): ", .$global_protein_inadequacy_OPT[i], "\n")
+      cat("  Calorie inadequacy:      ", .$global_calorie_inadequacy[i], "\n")
+    }
+  }
+cat("\n")
+# (Optional) Save a tidy CSV for later use
+# write_csv(global_summary_by_sex, "./output/global_summary_by_sex.csv")
+
+
 # --- (Optional) Save the final, most complete dataset ---
 saveRDS(final_results, file = "./output/final_analysis_with_all_inadequacy.rds")
 cat("\n--- Final results object saved successfully. The work is done. ---\n")
 
 
 ######
+
+
+print(final_results %>%
+  group_by(iso3) %>%
+  summarise(
+    mean_eer = mean(eer_kcal_marco_mean, na.rm = TRUE),
+    mean_obs = mean(kcal_mean_medium, na.rm = TRUE),
+    diff = mean_eer - mean_obs
+  ) %>%
+  filter(mean_eer > mean_obs) %>%
+  arrange(desc(diff)), n = 100)
+
+
+# --- NEW: EER vs observed by sex ---
+# print(
+#   final_results %>%
+#     group_by(iso3, sex) %>%
+#     summarise(
+#       mean_eer = mean(eer_kcal_marco_mean, na.rm = TRUE),
+#       mean_obs = mean(kcal_mean_medium,    na.rm = TRUE),
+#       diff     = mean_eer - mean_obs,
+#       .groups  = "drop"
+#     ) %>%
+#     filter(mean_eer > mean_obs) %>%
+#     arrange(desc(diff)),
+#   n = 100
+# )
+
 

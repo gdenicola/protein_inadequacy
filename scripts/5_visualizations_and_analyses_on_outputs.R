@@ -319,14 +319,24 @@ country_sex_MM <- scen_calc %>%
 plot_box_by_sex <- ggplot(country_sex_MM, aes(x = sex, y = prevalence, fill = sex)) +
   geom_boxplot(alpha = 0.9, outlier.alpha = 0.85, outlier.size = 1.8) +
   facet_wrap(~ metric, nrow = 1, scales = "free_y") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     expand = expansion(mult = c(0.02, 0.08))) +
-  scale_fill_manual(values = c("Females" = oi$blue, "Males" = oi$vermil), guide = "none") +
-  labs(title = "Country-level Prevalence of Inadequacy by Sex (MM scenario)",
-       x = "Sex", y = "Prevalence of inadequacy") +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    expand = expansion(mult = c(0.02, 0.08))
+  ) +
+  # Flipped palette: Females = vermilion, Males = blue
+  scale_fill_manual(
+    values = c("Females" = oi$vermil,
+               "Males" = oi$blue),
+    guide = "none"
+  ) +
+  labs(
+    title = "Country-level Prevalence of Inadequacy by Sex (MM scenario)",
+    x = "Sex",
+    y = "Prevalence of inadequacy"
+  ) +
   theme_minimal(base_size = 14) +
   theme(panel.grid.minor = element_blank())
-print(plot_box_by_sex)
+
 
 # ---- Country totals for maps (all sexes, MM) ----
 country_total_MM <- scen_calc %>%
@@ -419,15 +429,49 @@ cat6_palette <- c(
   "25%+"   = "#A50F15"
 )
 
+
+# ---- Shared, tight world viewport (kills top/bottom whitespace) ----
+lat_lim <- c(-58, 85)         # adjust if needed
+lon_lim <- c(-180, 180)
+
+common_coord_sf <- function() {
+  coord_sf(
+    xlim   = lon_lim,
+    ylim   = lat_lim,
+    expand = FALSE,           # critical: removes padding
+    clip   = "on",
+    datum  = NA
+  )
+}
+
+tight_map_theme <- function(base_size = 14) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      axis.text   = element_blank(),
+      panel.grid  = element_blank(),
+      plot.margin = margin(4, 6, 4, 6)  # small margins
+    )
+}
+
+# Map-specific saver with wide aspect to avoid letterboxing
+save_map <- function(plot, filename, width = 12, height = 6, dpi = 300) {
+  out_dir <- file.path(getwd(), "plots")
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+  filepath <- file.path(out_dir, paste0(filename, ".png"))
+  ggsave(filepath, plot = plot, width = width, height = height,
+         dpi = dpi, limitsize = FALSE, units = "in", bg = "white")
+  message("✅ Saved (map): ", filepath)
+}
+
 plot_cat6_map <- function(df, col, title_txt) {
   ggplot(df) +
     geom_sf(aes(fill = .data[[col]]), color = NA) +
     scale_fill_manual(values = cat6_palette, na.value = oi$greyNA, drop = FALSE) +
-    coord_sf(clip = "on") +
+    common_coord_sf() +
     labs(title = title_txt, fill = "Prevalence") +
-    theme_minimal(base_size = 14) +
-    theme(axis.text = element_blank(), panel.grid = element_blank())
+    tight_map_theme()
 }
+
 
 # ==============================================================
 # NEW: "Optimal-calorie world" maps (EAR & OPT protein) FIRST
@@ -459,55 +503,54 @@ print(plot_cat6_map(map_df, "cat6_prot_OPT", "Protein Inadequacy (OPT) — MM sc
 print(plot_cat6_map(map_df, "cat6_cal_MD",   "Calorie Inadequacy (MDER) — MM scenario"))
 
 # ==============================================================
-# Comparison maps: Protein vs Calories (clear labels)
-#   - Similar: |Prot - Cal| ≤ 5 pp
-#   - Prot. inad. > Cal. inad.: (protein higher)
-#   - Prot. inad. < Cal. inad.: (calories higher)
-#   Palette: three qualitative colors (no green/yellow/red; no hot/cold cue)
+# Ratio map: Protein-to-Calorie Inadequacy (MM scenario)
 # ==============================================================
 
-comp_levels <- c(
-  "Prot. inad. ≈ Cal. inad. (±5 pp)",
-  "Prot. inad. > Cal. inad. (≥5 pp)",
-  "Prot. inad. < Cal. inad. (≥5 pp)"
+ratio_palette <- c(
+  "<0.95" = "#BDB76B",  # muted olive – protein relatively lower
+  "≈ 1"   = "grey60",   # darker neutral gray – balance
+  ">1.05" = "#636363"   # dark slate – protein relatively higher
 )
-
-# Harmonious purple–cyan–blue combo (color-blind friendly, non-hot/cold)
-comp_palette <- c(
-  "Prot. inad. ≈ Cal. inad. (±5 pp)" = "#D9D9D9",  # neutral light gray
-  "Prot. inad. > Cal. inad. (≥5 pp)" = "#636363",  # dark slate
-  "Prot. inad. < Cal. inad. (≥5 pp)" = "#BDB76B"   # muted olive
-)
-
-
-
-
-
-compare_map_df <- function(df, prot_col, title_txt) {
+ratio_map_df <- function(df, prot_col, threshold_label) {
   df %>%
     mutate(
-      diff_pp = (cal_MD - .data[[prot_col]]) * 100,
-      comp_cat = case_when(
-        is.na(diff_pp)                     ~ NA_character_,
-        abs(diff_pp) <= 5                  ~ comp_levels[1],
-        diff_pp < -5                       ~ comp_levels[2], # protein inadequacy > calorie inadequacy
-        diff_pp >  5                       ~ comp_levels[3]  # protein inadequacy < calorie inadequacy
+      ratio = .data[[prot_col]] / cal_MD,
+      ratio_cat = case_when(
+        is.na(ratio) ~ NA_character_,
+        ratio < 0.95 ~ "<0.95",
+        ratio > 1.05 ~ ">1.05",
+        TRUE         ~ "≈ 1"
       ),
-      comp_cat = factor(comp_cat, levels = comp_levels)
+      ratio_cat = factor(ratio_cat, levels = c("<0.95", "≈ 1", ">1.05"))
     ) %>%
     {
       ggplot(.) +
-        geom_sf(aes(fill = comp_cat), color = NA) +
-        scale_fill_manual(values = comp_palette, na.value = oi$greyNA, drop = FALSE) +
-        coord_sf(clip = "on") +
-        labs(title = title_txt, fill = NULL) +
-        theme_minimal(base_size = 14) +
-        theme(axis.text = element_blank(), panel.grid = element_blank())
+        geom_sf(aes(fill = ratio_cat), color = NA) +
+        scale_fill_manual(values = ratio_palette, na.value = "grey90", drop = FALSE) +
+        common_coord_sf() +
+        labs(
+          title = paste0("Proportion of Protein Inadequacy (", threshold_label, ") to Caloric Inadequacy"),
+          fill  = "Proportion"
+        ) +
+        tight_map_theme() +
+        theme(
+          legend.position   = "right",
+          legend.title      = element_text(size = 12, face = "bold"),
+          legend.key.height = unit(0.5, "cm"),
+          legend.text       = element_text(size = 11)
+        )
     }
 }
 
-print(compare_map_df(map_df, "prot_EAR", "Protein (EAR) vs Calories — Difference Map (MM scenario)"))
-print(compare_map_df(map_df, "prot_OPT", "Protein (OPT) vs Calories — Difference Map (MM scenario)"))
+
+# Generate and save both maps
+ratio_map_EAR <- ratio_map_df(map_df, "prot_EAR", "EAR")
+ratio_map_OPT <- ratio_map_df(map_df, "prot_OPT", "OPT")
+
+print(ratio_map_EAR)
+print(ratio_map_OPT)
+
+
 
 # ---- Optional global totals (sanity) ----
 global_scenarios <- scen_calc %>%
@@ -545,31 +588,36 @@ save_plot(plot_prot_EAR, "ribbon_prot_EAR")
 save_plot(plot_prot_OPT, "ribbon_prot_OPT")
 save_plot(plot_cal, "ribbon_calorie")
 
-save_plot(plot_box_by_sex, "box_by_sex")
+save_map(plot_cat6_map(map_df_exact, "cat6_prot_EAR_exact",
+                       "Protein Inadequacy (EAR) — Optimal-Calorie World"),
+         "map_protein_EAR_optcal")
+save_map(plot_cat6_map(map_df_exact, "cat6_prot_OPT_exact",
+                       "Protein Inadequacy (OPT) — Optimal-Calorie World"),
+         "map_protein_OPT_optcal")
 
-save_plot(plot_cat6_map(map_df_exact, "cat6_prot_EAR_exact",
-                        "Protein Inadequacy (EAR) — Optimal-Calorie World"),
-          "map_protein_EAR_optcal")
-save_plot(plot_cat6_map(map_df_exact, "cat6_prot_OPT_exact",
-                        "Protein Inadequacy (OPT) — Optimal-Calorie World"),
-          "map_protein_OPT_optcal")
 
-save_plot(plot_cat6_map(map_df, "cat6_prot_EAR",
-                        "Protein Inadequacy (EAR) — MM scenario"),
-          "map_protein_EAR_MM")
-save_plot(plot_cat6_map(map_df, "cat6_prot_OPT",
-                        "Protein Inadequacy (OPT) — MM scenario"),
-          "map_protein_OPT_MM")
-save_plot(plot_cat6_map(map_df, "cat6_cal_MD",
-                        "Calorie Inadequacy (MDER) — MM scenario"),
-          "map_calorie_MM")
+save_map(plot_cat6_map(map_df, "cat6_prot_EAR",
+                       "Protein Inadequacy (EAR) — MM scenario"),
+         "map_protein_EAR_MM")
+save_map(plot_cat6_map(map_df, "cat6_prot_OPT",
+                       "Protein Inadequacy (OPT) — MM scenario"),
+         "map_protein_OPT_MM")
+save_map(plot_cat6_map(map_df, "cat6_cal_MD",
+                       "Calorie Inadequacy (MDER) — MM scenario"),
+         "map_calorie_MM")
 
-save_plot(compare_map_df(map_df, "prot_EAR",
-                         "Protein (EAR) vs Calories — Difference Map (MM scenario)"),
-          "diffmap_EAR_vs_calories")
-save_plot(compare_map_df(map_df, "prot_OPT",
-                         "Protein (OPT) vs Calories — Difference Map (MM scenario)"),
-          "diffmap_OPT_vs_calories")
+
+# ---- Save ratio maps (Protein-to-Calorie Inadequacy, MM scenario) ----
+# Build maps once with short threshold labels so titles are clean.
+ratio_map_EAR <- ratio_map_df(map_df, "prot_EAR", "EAR")
+ratio_map_OPT <- ratio_map_df(map_df, "prot_OPT", "OPT")
+
+
+# Save
+save_map(ratio_map_EAR, "map_ratio_proteinEAR_to_calorie_MM")
+save_map(ratio_map_OPT, "map_ratio_proteinOPT_to_calorie_MM")
+
+
 
 
 

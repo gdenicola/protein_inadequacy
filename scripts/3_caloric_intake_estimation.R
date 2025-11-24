@@ -148,8 +148,8 @@ country_level_data <- all_countries_needed %>%
 # 1. LOW Waste Scenario Function
 calculate_waste_pct_low <- function(gdp) {
   min_waste    <- 0.00
-  max_waste    <- 0.20
-  gdp_midpoint <- 25000 
+  max_waste    <- 0.15
+  gdp_midpoint <- 10000 
   k            <- 1
   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
   return(waste_percentage)
@@ -158,8 +158,8 @@ calculate_waste_pct_low <- function(gdp) {
 # 2. MEDIUM Waste Scenario Function (Your Current/Central Model)
 calculate_waste_pct_medium <- function(gdp) {
   min_waste    <- 0.00
-  max_waste    <- 0.25
-  gdp_midpoint <- 25000
+  max_waste    <- 0.20
+  gdp_midpoint <- 10000
   k            <- 1
   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
   return(waste_percentage)
@@ -169,8 +169,8 @@ calculate_waste_pct_medium <- function(gdp) {
 # 3. HIGH Waste Scenario Function
 calculate_waste_pct_high <- function(gdp) {
   min_waste    <- 0.00
-  max_waste    <- 0.30
-  gdp_midpoint <- 25000 
+  max_waste    <- 0.25
+  gdp_midpoint <- 10000 
   k            <- 1
   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
   return(waste_percentage)
