@@ -338,6 +338,10 @@ calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requ
   } else { NA_real_ }
 }
 
+
+#####REMOVE 0-1 age group from the data
+#optimal_calories_data <- optimal_calories_data %>% dplyr::filter(age_group != "0-0.99")
+
 # --- Step 4: Calculate Protein Inadequacy (EAR and OPTIMAL) ---
 cat("\n--- Calculating prevalence of protein inadequacy (EAR & OPTIMAL)... ---\n")
 
@@ -416,3 +420,4 @@ cat("\n--- Saving the complete 'optimal_calories_results' object... ---\n")
 saveRDS(optimal_calories_results, file = "./output/script2_final_results.rds")
 
 cat("--- Data saved successfully to ./output/script2_final_results.rds ---\n")
+
