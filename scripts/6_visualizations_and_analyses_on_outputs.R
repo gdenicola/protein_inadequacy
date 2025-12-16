@@ -1,5 +1,5 @@
 # ==============================================================
-# Script 5 — Plots & Maps (color-blind friendly)
+# Script 6 — Plots & Maps (color-blind friendly)
 #   PART A: Protein ribbon plots with "exact calories" (from Script 2)
 #   PART B: Full 3×3 scenarios (from Script 4): ribbons, boxplots, maps
 #   NEW:   Common y-axis; Robust joins; Prot vs Cal difference maps
@@ -16,6 +16,7 @@ library(scales)
 library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
+library(viridis)
 
 # ---- Setup ----
 rm(list = ls())
@@ -126,7 +127,8 @@ exact_long <- global_by_age_exact %>%
                names_to = "metric", values_to = "value") %>%
   mutate(metric = recode(metric,
                          prot_EAR = "Protein inadequacy (EAR) — exact calories",
-                         prot_OPT = "Protein inadequacy (OPT) — exact calories"))
+                         prot_OPT = "Below optimal protein intake (OPT) — exact calories"))
+
 
 exact_ribbon <- exact_long %>%
   group_by(age_group, metric) %>%
@@ -197,8 +199,9 @@ plot_long <- global_by_age_scen %>%
                names_to = "metric", values_to = "value") %>%
   mutate(metric = recode(metric,
                          prot_inad_EAR = "Protein inadequacy (EAR)",
-                         prot_inad_OPT = "Protein inadequacy (OPT)",
+                         prot_inad_OPT = "Below optimal protein intake (OPT)",
                          cal_inad      = "Calorie inadequacy"))
+
 
 ribbon_df <- plot_long %>%
   group_by(age_group, metric) %>%
@@ -271,10 +274,16 @@ plot_age_with_ribbon <- function(metric_name, title_txt, subtitle_txt) {
 }
 
 # --- Print ribbon plots (common y-axis) ---
-plot_exact_EAR <- plot_exact_with_ribbon("Protein inadequacy (EAR) — exact calories",
-                                         "Protein Inadequacy by Age — Exact Calories (EAR)")
-plot_exact_OPT <- plot_exact_with_ribbon("Protein inadequacy (OPT) — exact calories",
-                                         "Protein Inadequacy by Age — Exact Calories (OPT)")
+plot_exact_EAR <- plot_exact_with_ribbon(
+  "Protein inadequacy (EAR) — exact calories",
+  "Protein Inadequacy by Age — Exact Calories (EAR)"
+)
+
+plot_exact_OPT <- plot_exact_with_ribbon(
+  "Below optimal protein intake (OPT) — exact calories",
+  "Proportion Below Optimal Protein Intake by Age — Exact Calories (OPT)"
+)
+
 print(plot_exact_EAR); print(plot_exact_OPT)
 
 plot_prot_EAR <- plot_age_with_ribbon(
@@ -282,11 +291,13 @@ plot_prot_EAR <- plot_age_with_ribbon(
   "Global Protein Inadequacy by Age (EAR threshold)",
   "Central scenario (M–M) in black; other 8 scenario lines dashed grey; ribbon = min–max across scenarios"
 )
+
 plot_prot_OPT <- plot_age_with_ribbon(
-  "Protein inadequacy (OPT)",
-  "Global Protein Inadequacy by Age (OPT threshold)",
+  "Below optimal protein intake (OPT)",
+  "Global Share Below Optimal Protein Intake by Age (OPT threshold)",
   "Central scenario (M–M) in black; other 8 scenario lines dashed grey; ribbon = min–max across scenarios"
 )
+
 plot_cal <- plot_age_with_ribbon(
   "Calorie inadequacy",
   "Global Calorie Inadequacy by Age (MDER)",
@@ -312,9 +323,14 @@ country_sex_MM <- scen_calc %>%
   ) %>%
   pivot_longer(cols = c(prot_EAR, prot_OPT, cal_MD),
                names_to = "metric", values_to = "prevalence") %>%
-  mutate(metric = factor(metric,
-                         levels = c("prot_EAR","prot_OPT","cal_MD"),
-                         labels = c("Protein (EAR)","Protein (OPT)","Calories (MDER)")))
+  mutate(metric = factor(
+    metric,
+    levels = c("prot_EAR","prot_OPT","cal_MD"),
+    labels = c("Protein (EAR)",
+               "Below optimal protein intake (OPT)",
+               "Calories (MDER)")
+  ))
+
 
 plot_box_by_sex <- ggplot(country_sex_MM, aes(x = sex, y = prevalence, fill = sex)) +
   geom_boxplot(alpha = 0.9, outlier.alpha = 0.85, outlier.size = 1.8) +
@@ -494,13 +510,19 @@ map_df_exact <- world %>%
     cat6_prot_OPT_exact = cat6_cut(prot_OPT_exact)
   )
 
-print(plot_cat6_map(map_df_exact, "cat6_prot_EAR_exact", "Protein Inadequacy (EAR) — Optimal-Calorie World"))
-print(plot_cat6_map(map_df_exact, "cat6_prot_OPT_exact", "Protein Inadequacy (OPT) — Optimal-Calorie World"))
+print(plot_cat6_map(map_df_exact, "cat6_prot_EAR_exact",
+                    "Protein Inadequacy (EAR) — Optimal-Calorie World"))
+print(plot_cat6_map(map_df_exact, "cat6_prot_OPT_exact",
+                    "Proportion Below Optimal Protein Intake (OPT) — Optimal-Calorie World"))
 
 # --- Then the MM scenario maps (as before) ---
-print(plot_cat6_map(map_df, "cat6_prot_EAR", "Protein Inadequacy (EAR) — MM scenario"))
-print(plot_cat6_map(map_df, "cat6_prot_OPT", "Protein Inadequacy (OPT) — MM scenario"))
-print(plot_cat6_map(map_df, "cat6_cal_MD",   "Calorie Inadequacy (MDER) — MM scenario"))
+print(plot_cat6_map(map_df, "cat6_prot_EAR",
+                    "Protein Inadequacy (EAR) — MM scenario"))
+print(plot_cat6_map(map_df, "cat6_prot_OPT",
+                    "Proportion Below Optimal Protein Intake (OPT) — MM scenario"))
+print(plot_cat6_map(map_df, "cat6_cal_MD",
+                    "Calorie Inadequacy (MDER) — MM scenario"))
+
 
 # ==============================================================
 # Ratio map: Protein-to-Calorie Inadequacy (MM scenario)
@@ -512,6 +534,12 @@ ratio_palette <- c(
   ">1.05" = "#636363"   # dark slate – protein relatively higher
 )
 ratio_map_df <- function(df, prot_col, threshold_label) {
+  title_txt <- if (threshold_label == "OPT") {
+    "Proportion Below Optimal Protein Intake (OPT) Relative to Caloric Inadequacy"
+  } else {
+    paste0("Proportion of Protein Inadequacy (", threshold_label, ") to Caloric Inadequacy")
+  }
+  
   df %>%
     mutate(
       ratio = .data[[prot_col]] / cal_MD,
@@ -529,7 +557,7 @@ ratio_map_df <- function(df, prot_col, threshold_label) {
         scale_fill_manual(values = ratio_palette, na.value = "grey90", drop = FALSE) +
         common_coord_sf() +
         labs(
-          title = paste0("Proportion of Protein Inadequacy (", threshold_label, ") to Caloric Inadequacy"),
+          title = title_txt,
           fill  = "Proportion"
         ) +
         tight_map_theme() +
@@ -541,6 +569,7 @@ ratio_map_df <- function(df, prot_col, threshold_label) {
         )
     }
 }
+
 
 
 # Generate and save both maps
@@ -572,7 +601,7 @@ print(
 
 
 # ---- Helper to save ggplots to ../plots ----
-save_plot <- function(plot, filename, width = 8, height = 6, dpi = 300) {
+save_plot <- function(plot, filename, width = 10, height = 6, dpi = 300) {
   out_dir <- file.path(getwd(), "plots")
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
   filepath <- file.path(out_dir, paste0(filename, ".png"))
@@ -618,7 +647,79 @@ save_map(ratio_map_EAR, "map_ratio_proteinEAR_to_calorie_MM")
 save_map(ratio_map_OPT, "map_ratio_proteinOPT_to_calorie_MM")
 
 
+# ==============================================================
+# NEW: Maps of share of protein from ASF and from seafood
+# ==============================================================
+
+# Load ASF / seafood protein proportions (from Script 5)
+protein_props <- readRDS("./output/protein_asf_props.rds")
+
+# Keep 2018 only (to match the rest of Script 6) and normalize ISO codes
+protein_props_parented <- protein_props %>%
+  filter(year == 2018) %>%
+  mutate(parent_iso3 = normalize_iso3(iso3))
+
+# Join to world geometry (using the same parent_iso3 logic as other maps)
+map_asf_sea <- world %>%
+  left_join(protein_props_parented, by = "parent_iso3")
+
+# Interpreted as "higher share" vs "lower share", not good vs bad.
+asf_map <- ggplot(map_asf_sea) +
+  geom_sf(aes(fill = prop_asf), color = NA) +
+  scale_fill_viridis_c(
+    option = "magma",
+    direction = -1,   # now low = bright, high = dark
+    limits   = c(0, 1),
+    labels   = scales::percent_format(accuracy = 1),
+    na.value = oi$greyNA
+  ) +
+  common_coord_sf() +
+  labs(
+    title = "Share of Total Protein from Animal-Source Foods (2018)",
+    fill  = "ASF protein\n(% of total)"
+  ) +
+  tight_map_theme()
+
+#alternative single gradient scale (blue)
+# scale_fill_gradientn(
+#   colors = c("#EFF3FF", "#BDD7E7", "#6BAED6", "#2171B5", "#08306B"),
+#   limits = c(0,1),
+#   labels = scales::percent_format(accuracy = 1),
+#   na.value = oi$greyNA
+# )
+
+#alt_red
+# scale_fill_gradientn(
+#   colors = c("#FEE5D9", "#FCBBA1", "#FC9272", "#CC1F1A", "#66000A"),
+#   limits = c(0,1),
+#   labels = scales::percent_format(accuracy = 1),
+#   na.value = oi$greyNA
+# )
+
+seafood_map <- ggplot(map_asf_sea) +
+  geom_sf(aes(fill = prop_seafood), color = NA) +
+  scale_fill_viridis_c(
+    option = "mako",
+    direction = -1,   
+    #limits   = c(0, 1),
+    labels   = scales::percent_format(accuracy = 1),
+    na.value = oi$greyNA
+  ) +
+  common_coord_sf() +
+  labs(
+    title = "Share of Total Protein from Seafood (2018)",
+    fill  = "Seafood protein\n(% of total)"
+  ) +
+  tight_map_theme()
+
+# Print to screen
+print(asf_map)
+print(seafood_map)
+
+# Save to ../plots using the existing helper
+save_map(asf_map,     "map_share_protein_ASF")
+save_map(seafood_map, "map_share_protein_seafood")
 
 
 
-cat("\n✅ Script 5 finished: optimal-calorie-world maps first; new neutral 3-color palette for difference maps.\n")
+cat("\n✅ Script 6 finished: optimal-calorie-world maps first; new neutral 3-color palette for difference maps.\n")

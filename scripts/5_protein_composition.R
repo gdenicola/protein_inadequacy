@@ -282,3 +282,211 @@ closest_to_median <- foods_with_gdd %>%
     median_value
   )
 # You can inspect closest_to_median interactively if needed.
+
+
+
+
+## now to load the GDD data for each category
+# v01  Fruits  
+# v02  Non-starchy vegetables  
+# v03  Potatoes  
+# v04  Other starchy vegetables  
+# v05  Beans and legumes  
+# v06  Nuts and seeds  
+# v07  Refined grains  
+# v08  Whole grains  
+# v09  Total processed meats  
+# v10  Unprocessed red meats  
+# v11  Total seafood  
+# v12  Eggs  
+# v13  Cheese  
+# v14  Yogurt (including fermented milk)  
+# v15  Sugar-sweetened beverages  
+# v16  Fruit juices  
+# v17  Coffee  
+# v18  Tea  
+# v57  Total milk
+
+
+gdd_path <- "./data/GDD_FinalEstimates_01102022/Country-level estimates/"
+
+# which variables we want
+target_vars <- c(sprintf("v%02d", 1:18), "v57")
+
+# build full paths (e.g. v01_cnty.csv, v02_cnty.csv, ..., v57_cnty.csv)
+gdd_files <- tibble(
+  var_code = target_vars,
+  file     = file.path(gdd_path, paste0(var_code, "_cnty.csv"))
+)
+
+# load them ALL as-is, no filtering yet
+gdd_raw <- gdd_files %>%
+  mutate(
+    data = map(file, ~ read_csv(.x))  # keep full structure for now
+  ) %>%
+  { set_names(.$data, .$var_code) }
+
+# now you have:
+# gdd_raw[["v01"]]
+# gdd_raw[["v02"]]
+# ...
+# gdd_raw[["v18"]]
+# gdd_raw[["v57"]]
+
+
+## 1) Map v-codes to GDD category names --------------------------------------
+var_labels <- tribble(
+  ~var_code, ~GDD_category,
+  "v01", "Fruits",
+  "v02", "Non-starchy vegetables",
+  "v03", "Potatoes",
+  "v04", "Other starchy vegetables",
+  "v05", "Beans and legumes",
+  "v06", "Nuts and seeds",
+  "v07", "Refined grains",
+  "v08", "Whole grains",
+  "v09", "Total processed meats",
+  "v10", "Unprocessed red meats",
+  "v11", "Total seafood",
+  "v12", "Eggs",
+  "v13", "Cheese",
+  "v14", "Yogurt including fermented milk",
+  "v15", "Sugar-sweetened beverages",
+  "v16", "Fruit juices",
+  "v17", "Coffee",
+  "v18", "Tea",
+  "v57", "Total milk"
+)
+
+## 2) Helper to extract national, all-age, all-sex, all-edu/urban rows ------
+extract_nat_all_2018 <- function(df) {
+  df %>%
+    filter(
+      year   == 2018,
+      urban  == 999,
+      edu    == 999,
+      female == 999,
+      age    == 999
+    ) %>%
+    select(iso3, year, median)
+}
+
+## 3) Stack all v's long, then pivot wide by GDD category --------------------
+gdd_long_2018 <- imap_dfr(
+  gdd_raw,
+  ~ extract_nat_all_2018(.x) %>%
+    mutate(var_code = .y)  # .y is e.g. "v01"
+)
+
+gdd_intake_2018_wide <- gdd_long_2018 %>%
+  left_join(var_labels, by = "var_code") %>%
+  select(iso3, year, GDD_category, median) %>%
+  pivot_wider(
+    names_from  = GDD_category,
+    values_from = median
+  )
+
+# Result:
+# gdd_intake_2018_wide = one row per country (iso3),
+#                        columns = grams/day (median) for each GDD food group.
+
+## --------------------------------------------------------------------
+## Compute country-level protein from ASFs and seafood (proportions)
+## Requires:
+##   - protein_per_gdd: GDD_category, median_protein_100g
+##   - gdd_intake_2018_wide: iso3, year, GDD_category columns (grams/day)
+## --------------------------------------------------------------------
+
+
+# 1) Define ASF and seafood groups ------------------------------------
+asf_groups <- c(
+  "Total processed meats",
+  "Unprocessed red meats",
+  "Total seafood",
+  "Eggs",
+  "Cheese",
+  "Total milk",
+  "Yogurt including fermented milk"
+)
+
+seafood_group <- "Total seafood"
+
+# 2) Protein density lookup (g protein per g food) --------------------
+protein_density_lookup <- protein_per_gdd %>%
+  mutate(protein_per_g = median_protein_100g / 100) %>%
+  select(GDD_category, protein_per_g)
+
+# 3) Merge intake (g/day) with protein density ------------------------
+gdd_protein_long <- gdd_intake_2018_wide %>%
+  pivot_longer(
+    cols      = -c(iso3, year),
+    names_to  = "GDD_category",
+    values_to = "intake_g_day"
+  ) %>%
+  left_join(protein_density_lookup, by = "GDD_category") %>%
+  mutate(
+    protein_g_day = intake_g_day * protein_per_g
+  )
+
+# 4) Total protein per country ----------------------------------------
+protein_totals <- gdd_protein_long %>%
+  group_by(iso3, year) %>%
+  summarise(
+    total_protein = sum(protein_g_day, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 5) Protein from animal source foods (ASFs) --------------------------
+protein_asf <- gdd_protein_long %>%
+  filter(GDD_category %in% asf_groups) %>%
+  group_by(iso3, year) %>%
+  summarise(
+    asf_protein = sum(protein_g_day, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 6) Protein from seafood only ----------------------------------------
+protein_seafood <- gdd_protein_long %>%
+  filter(GDD_category == seafood_group) %>%
+  group_by(iso3, year) %>%
+  summarise(
+    seafood_protein = sum(protein_g_day, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 7) Combine and compute proportions ----------------------------------
+protein_props <- protein_totals %>%
+  left_join(protein_asf,     by = c("iso3", "year")) %>%
+  left_join(protein_seafood, by = c("iso3", "year")) %>%
+  mutate(
+    prop_asf     = asf_protein     / total_protein,
+    prop_seafood = seafood_protein / total_protein
+  )
+
+# protein_props:
+#   iso3, year, total_protein (g/d),
+#   asf_protein (g/d), seafood_protein (g/d),
+#   prop_asf (share of protein from ASFs),
+#   prop_seafood (share of protein from seafood).
+
+
+
+
+# Save ASF / seafood protein proportions for use in Script 6
+saveRDS(protein_props, "./output/protein_asf_props.rds")
+
+
+protein_props_named <- protein_props %>%
+  mutate(
+    country = countrycode(iso3, origin = "iso3c", destination = "country.name")
+  ) %>%
+  select(country, everything()) %>%
+  arrange(desc(prop_asf))   # <-- sort by ASF share, highest first
+
+
+# library(writexl)
+# 
+# write_xlsx(
+#   protein_props_named,
+#   "./output/protein_asf_props.xlsx"
+# )
