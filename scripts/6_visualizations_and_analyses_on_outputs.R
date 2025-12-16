@@ -489,6 +489,47 @@ plot_cat6_map <- function(df, col, title_txt) {
 }
 
 
+# ------------------------------------------------------------
+# Continuous plasma maps (capped at a chosen max)
+# ------------------------------------------------------------
+# Continuous protein maps (no transform, non-white baseline)
+# Continuous protein maps (no transform, non-white baseline)
+plot_protein_map_cont <- function(df, value_col, title_txt, cap) {
+  ggplot(df) +
+    geom_sf(aes(fill = .data[[value_col]]), color = NA) +
+    scale_fill_gradientn(
+      colours = c("#f0f0f0", "#fdbb84", "#e34a33"),
+      limits  = c(0, cap),
+      oob     = squish,
+      labels  = percent_format(accuracy = 1),
+      na.value = "#8c8c8c"   # <-- darker NA grey
+    ) +
+    common_coord_sf() +
+    labs(title = title_txt, fill = "Prevalence") +
+    tight_map_theme()
+}
+
+# Continuous calorie maps (same palette, capped at 30%)
+plot_calorie_map_cont <- function(df, value_col, title_txt, cap = 0.301) {
+  ggplot(df) +
+    geom_sf(aes(fill = .data[[value_col]]), color = NA) +
+    scale_fill_gradientn(
+      colours = c("#f0f0f0", "#fdbb84", "#e34a33"),
+      limits  = c(0, cap),
+      oob     = squish,
+      labels  = percent_format(accuracy = 1),
+      na.value = "#8c8c8c"   # <-- darker NA grey
+    ) +
+    common_coord_sf() +
+    labs(title = title_txt, fill = "Prevalence") +
+    tight_map_theme()
+}
+
+
+
+
+
+
 # ==============================================================
 # NEW: "Optimal-calorie world" maps (EAR & OPT protein) FIRST
 # ==============================================================
@@ -510,18 +551,37 @@ map_df_exact <- world %>%
     cat6_prot_OPT_exact = cat6_cut(prot_OPT_exact)
   )
 
-print(plot_cat6_map(map_df_exact, "cat6_prot_EAR_exact",
-                    "Protein Inadequacy (EAR) — Optimal-Calorie World"))
-print(plot_cat6_map(map_df_exact, "cat6_prot_OPT_exact",
-                    "Proportion Below Optimal Protein Intake (OPT) — Optimal-Calorie World"))
+print(plot_protein_map_cont(
+  map_df_exact, "prot_EAR_exact",
+  "Protein Inadequacy (EAR) — Optimal-Calorie World",
+  cap = 0.301
+))
 
-# --- Then the MM scenario maps (as before) ---
-print(plot_cat6_map(map_df, "cat6_prot_EAR",
-                    "Protein Inadequacy (EAR) — MM scenario"))
-print(plot_cat6_map(map_df, "cat6_prot_OPT",
-                    "Proportion Below Optimal Protein Intake (OPT) — MM scenario"))
-print(plot_cat6_map(map_df, "cat6_cal_MD",
-                    "Calorie Inadequacy (MDER) — MM scenario"))
+print(plot_protein_map_cont(
+  map_df_exact, "prot_OPT_exact",
+  "Proportion Below Optimal Protein Intake (OPT) — Optimal-Calorie World",
+  cap = 0.701
+))
+
+
+print(plot_protein_map_cont(
+  map_df, "prot_EAR",
+  "Protein Inadequacy (EAR) — MM scenario",
+  cap = 0.301
+))
+
+print(plot_protein_map_cont(
+  map_df, "prot_OPT",
+  "Proportion Below Optimal Protein Intake (OPT) — MM scenario",
+  cap = 0.70
+))
+
+print(plot_calorie_map_cont(
+  map_df, "cal_MD",
+  "Calorie Inadequacy (MDER) — MM scenario",
+  cap = 0.30
+))
+
 
 
 # ==============================================================
@@ -617,23 +677,54 @@ save_plot(plot_prot_EAR, "ribbon_prot_EAR")
 save_plot(plot_prot_OPT, "ribbon_prot_OPT")
 save_plot(plot_cal, "ribbon_calorie")
 
-save_map(plot_cat6_map(map_df_exact, "cat6_prot_EAR_exact",
-                       "Protein Inadequacy (EAR) — Optimal-Calorie World"),
-         "map_protein_EAR_optcal")
-save_map(plot_cat6_map(map_df_exact, "cat6_prot_OPT_exact",
-                       "Protein Inadequacy (OPT) — Optimal-Calorie World"),
-         "map_protein_OPT_optcal")
+# ---- Continuous protein maps (EAR + OPT) for optimal-calorie world ----
+save_map(
+  plot_protein_map_cont(
+    map_df_exact, "prot_EAR_exact",
+    "Protein Inadequacy (EAR) — Optimal-Calorie World",
+    cap = 0.30
+  ),
+  "map_protein_EAR_optcal"
+)
 
+save_map(
+  plot_protein_map_cont(
+    map_df_exact, "prot_OPT_exact",
+    "Proportion Below Optimal Protein Intake (OPT) — Optimal-Calorie World",
+    cap = 0.70
+  ),
+  "map_protein_OPT_optcal"
+)
 
-save_map(plot_cat6_map(map_df, "cat6_prot_EAR",
-                       "Protein Inadequacy (EAR) — MM scenario"),
-         "map_protein_EAR_MM")
-save_map(plot_cat6_map(map_df, "cat6_prot_OPT",
-                       "Protein Inadequacy (OPT) — MM scenario"),
-         "map_protein_OPT_MM")
-save_map(plot_cat6_map(map_df, "cat6_cal_MD",
-                       "Calorie Inadequacy (MDER) — MM scenario"),
-         "map_calorie_MM")
+# ---- Continuous protein maps (EAR + OPT) for realistic MM ----
+save_map(
+  plot_protein_map_cont(
+    map_df, "prot_EAR",
+    "Protein Inadequacy (EAR) — MM scenario",
+    cap = 0.30
+  ),
+  "map_protein_EAR_MM"
+)
+
+save_map(
+  plot_protein_map_cont(
+    map_df, "prot_OPT",
+    "Proportion Below Optimal Protein Intake (OPT) — MM scenario",
+    cap = 0.70
+  ),
+  "map_protein_OPT_MM"
+)
+
+# ---- Continuous calorie map ----
+save_map(
+  plot_calorie_map_cont(
+    map_df, "cal_MD",
+    "Calorie Inadequacy (MDER) — MM scenario",
+    cap = 0.30
+  ),
+  "map_calorie_MM"
+)
+
 
 
 # ---- Save ratio maps (Protein-to-Calorie Inadequacy, MM scenario) ----
