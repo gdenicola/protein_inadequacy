@@ -490,3 +490,67 @@ protein_props_named <- protein_props %>%
 #   protein_props_named,
 #   "./output/protein_asf_props.xlsx"
 # )
+
+
+# ==============================================================
+# Quality-adjusted EAR thresholds by country and stratum
+#   +15% EAR if ASF share < 30%, unchanged otherwise
+# ==============================================================
+
+# 1) Build an iso3-level quality factor from ASF share
+quality_factor <- protein_props %>%
+  filter(year == 2018) %>%
+  transmute(
+    iso3,
+    prop_asf,
+    quality_factor_EAR = if_else(prop_asf < 0.30, 1.15, 1.00)
+  )
+
+# 2) Join to the stratum-level dataset `dat` and create adjusted EARs
+dat_quality <- dat %>%
+  left_join(quality_factor, by = "iso3") %>%
+  mutate(
+    # if ASF info is missing for some iso3, default to no adjustment
+    quality_factor_EAR = if_else(is.na(quality_factor_EAR), 1.00, quality_factor_EAR),
+    ear_mean_g_day_adj  = ear_mean_g_day  * quality_factor_EAR,
+    ear_low_g_day_adj   = ear_low_g_day   * quality_factor_EAR,
+    ear_high_g_day_adj  = ear_high_g_day  * quality_factor_EAR
+  )
+
+
+#now, recalculate imnadequacy with the new threshold here using function from script 4
+
+
+# --- Helper: same as Script 4 ---
+calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requirement) {
+  if (is.na(requirement) || requirement <= 0 ||
+      is.na(mean_intake) || is.na(cv_intake) ||
+      mean_intake <= 0 || cv_intake <= 0) {
+    return(NA_real_)
+  }
+  if (distribution_type == "gamma") {
+    shape_k <- 1 / (cv_intake^2)
+    if (is.infinite(shape_k)) return(NA_real_)
+    scale_theta <- mean_intake * cv_intake^2
+    pgamma(requirement, shape = shape_k, scale = scale_theta)
+  } else if (distribution_type == "log-normal") {
+    meanlog <- log(mean_intake) - 0.5 * log(1 + cv_intake^2)
+    sdlog   <- sqrt(log(1 + cv_intake^2))
+    if (is.na(sdlog) || sdlog <= 0) return(NA_real_)
+    plnorm(requirement, meanlog = meanlog, sdlog = sdlog)
+  } else {
+    NA_real_
+  }
+}
+
+dat_quality <- dat_quality %>%
+  rowwise() %>%
+  mutate(
+    prevalence_protein_inadequate_EAR_adj = calculate_inadequacy(
+      mean_intake       = protein_grams_true,
+      cv_intake         = cv_protein,
+      distribution_type = best_dist_protein,
+      requirement       = ear_mean_g_day_adj
+    )
+  ) %>%
+  ungroup()
