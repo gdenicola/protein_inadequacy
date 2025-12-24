@@ -23,6 +23,13 @@ rm(list = ls())
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path)); setwd("..")
 options(scipen = 999)
 
+
+# Load main stratum-level dataset (with all inadequacy + extras)
+# This is the output of script 5
+dat <- readRDS("./output/dat_quality.rds") %>%
+  distinct(iso3, sex, age_group, .keep_all = TRUE)
+
+
 # ---- Okabe–Ito palette (color-blind friendly) ----
 oi <- list(
   black   = "#000000",
@@ -59,58 +66,60 @@ age_order <- c("1-4","5-9","10-14","15-19","20-24","25-29","30-34","35-39",
 # PART A — Ribbon plots for Protein assuming "exact calories"
 #           (load Script 2 BEFORE Script 4)
 # ==============================================================
-
-prot2 <- readRDS("./output/script2_final_results.rds")
-
-prot2_slim <- prot2 %>%
-  select(any_of(c(
-    "iso3","sex","age_group",
-    "best_dist","cv",
-    "ear_mean_g_day","opt_mean_g_day",
-    "protein_kcal_share_lower","protein_kcal_share_mean","protein_kcal_share_upper",
-    "kcal_consumed_optimal",
-    "eer_kcal_marco_mean",
-    "population"
-  ))) %>%
-  mutate(age_group = as.character(age_group)) %>%
+# Use dat (dat_quality) directly for exact-calorie ribbons
+prot2_long <- dat %>%
   filter(age_group != "0-0.99") %>%
-  rename(best_dist_protein = best_dist,
-         cv_protein        = cv)
+  transmute(
+    iso3,
+    sex,
+    age_group = as.character(age_group),
+    population,
+    best_dist_protein,
+    cv_protein,
+    ear_mean_g_day,
+    ear_mean_g_day_adj,
+    opt_mean_g_day,
+    protein_kcal_share_lower,
+    protein_kcal_share_mean,
+    protein_kcal_share_upper,
+    exact_kcal = ifelse(!is.na(kcal_consumed_optimal),
+                        kcal_consumed_optimal,
+                        eer_kcal_marco_mean)
+  ) %>%
+  pivot_longer(
+    starts_with("protein_kcal_share_"),
+    names_to  = "prot_level",
+    values_to = "protein_share"
+  ) %>%
+  mutate(
+    prot_level = recode(
+      prot_level,
+      protein_kcal_share_lower = "lower",
+      protein_kcal_share_mean  = "mean",
+      protein_kcal_share_upper = "upper"
+    )
+  )
 
-need_pop_from_s4 <- !"population" %in% names(prot2_slim) || all(is.na(prot2_slim$population))
-
-prot2_long <- prot2_slim %>%
-  mutate(exact_kcal = ifelse(!is.na(kcal_consumed_optimal), kcal_consumed_optimal, eer_kcal_marco_mean)) %>%
-  select(iso3, sex, age_group, population, exact_kcal,
-         best_dist_protein, cv_protein, ear_mean_g_day, opt_mean_g_day,
-         protein_kcal_share_lower, protein_kcal_share_mean, protein_kcal_share_upper) %>%
-  pivot_longer(starts_with("protein_kcal_share_"),
-               names_to = "prot_level", values_to = "protein_share") %>%
-  mutate(prot_level = recode(prot_level,
-                             protein_kcal_share_lower = "lower",
-                             protein_kcal_share_mean  = "mean",
-                             protein_kcal_share_upper = "upper"))
-
-if (need_pop_from_s4 || any(is.na(prot2_long$population))) {
-  dat_pop <- readRDS("./output/final_analysis_with_all_inadequacy.rds") %>%
-    distinct(iso3, sex, age_group, .keep_all = TRUE) %>%
-    filter(age_group != "0-0.99") %>%
-    select(iso3, sex, age_group, population)
-  prot2_long <- prot2_long %>%
-    select(-population) %>%
-    left_join(dat_pop, by = c("iso3","sex","age_group"))
-}
 
 prot2_calc <- prot2_long %>%
   rowwise() %>%
   mutate(
     protein_grams_exact = (exact_kcal * protein_share) / 4,
+    # Original EAR-based inadequacy
     prot_inad_EAR_exact = calculate_inadequacy(
-      protein_grams_exact, cv_protein, best_dist_protein, ear_mean_g_day),
+      protein_grams_exact, cv_protein, best_dist_protein, ear_mean_g_day
+    ),
+    # OPT-based inadequacy
     prot_inad_OPT_exact = calculate_inadequacy(
-      protein_grams_exact, cv_protein, best_dist_protein, opt_mean_g_day)
+      protein_grams_exact, cv_protein, best_dist_protein, opt_mean_g_day
+    ),
+    # NEW: quality-adjusted EAR-based inadequacy
+    prot_inad_EAR_exact_Q = calculate_inadequacy(
+      protein_grams_exact, cv_protein, best_dist_protein, ear_mean_g_day_adj
+    )
   ) %>%
   ungroup()
+
 
 global_by_age_exact <- prot2_calc %>%
   group_by(age_group, prot_level) %>%
@@ -141,13 +150,19 @@ exact_main <- exact_long %>% filter(prot_level == "mean")
 # PART B — Full 3×3 scenarios (load Script 4 now)
 # ==============================================================
 
-dat <- readRDS("./output/final_analysis_with_all_inadequacy.rds") %>%
+# ==============================================================
+# PART B — Full 3×3 scenarios (from dat_quality)
+# ==============================================================
+
+dat_scen <- dat %>%
   distinct(iso3, sex, age_group, .keep_all = TRUE) %>%
   filter(age_group != "0-0.99")
 
-prot_long <- dat %>%
+prot_long <- dat_scen %>%
   select(iso3, sex, age_group, population,
-         cv_protein, best_dist_protein, ear_mean_g_day, opt_mean_g_day,
+         cv_protein, best_dist_protein,
+         ear_mean_g_day, ear_mean_g_day_adj,  # <-- NEW
+         opt_mean_g_day,
          cv_calorie, best_dist_calorie, mder_stratum_kcal,
          protein_kcal_share_lower, protein_kcal_share_mean, protein_kcal_share_upper) %>%
   pivot_longer(starts_with("protein_kcal_share_"),
@@ -157,7 +172,8 @@ prot_long <- dat %>%
                              protein_kcal_share_mean  = "mean",
                              protein_kcal_share_upper = "upper"))
 
-cal_long <- dat %>%
+
+cal_long <- dat_scen %>%
   select(iso3, sex, age_group, kcal_mean_low, kcal_mean_medium, kcal_mean_high) %>%
   pivot_longer(
     cols = c(kcal_mean_low, kcal_mean_medium, kcal_mean_high),
@@ -167,18 +183,36 @@ cal_long <- dat %>%
   mutate(cal_scenario = sub("^kcal_mean_", "", cal_scenario))
 
 scen <- prot_long %>%
-  inner_join(cal_long, by = c("iso3","sex","age_group"),
-             relationship = "many-to-many")
+  inner_join(
+    cal_long,
+    by = c("iso3", "sex", "age_group"),
+    relationship = "many-to-many"
+  )
+
 
 scen_calc <- scen %>%
   rowwise() %>%
   mutate(
     protein_grams = (kcal_mean * protein_share) / 4,
-    prot_inad_EAR = calculate_inadequacy(protein_grams, cv_protein, best_dist_protein, ear_mean_g_day),
-    prot_inad_OPT = calculate_inadequacy(protein_grams, cv_protein, best_dist_protein, opt_mean_g_day),
-    cal_inad      = calculate_inadequacy(kcal_mean,     cv_calorie,  best_dist_calorie,  mder_stratum_kcal)
+    # Original EAR inadequacy
+    prot_inad_EAR = calculate_inadequacy(
+      protein_grams, cv_protein, best_dist_protein, ear_mean_g_day
+    ),
+    # OPT inadequacy
+    prot_inad_OPT = calculate_inadequacy(
+      protein_grams, cv_protein, best_dist_protein, opt_mean_g_day
+    ),
+    # Calorie inadequacy
+    cal_inad      = calculate_inadequacy(
+      kcal_mean,     cv_calorie,  best_dist_calorie,  mder_stratum_kcal
+    ),
+    # NEW: quality-adjusted EAR inadequacy (scenario world)
+    prot_inad_EAR_Q = calculate_inadequacy(
+      protein_grams, cv_protein, best_dist_protein, ear_mean_g_day_adj
+    )
   ) %>%
   ungroup()
+
 
 global_by_age_scen <- scen_calc %>%
   group_by(age_group, prot_level, cal_scenario) %>%
@@ -811,6 +845,76 @@ print(seafood_map)
 save_map(asf_map,     "map_share_protein_ASF")
 save_map(seafood_map, "map_share_protein_seafood")
 
+# ==============================================================
+# NEW: Quality-adjusted EAR maps (protein) — EAR only
+# ==============================================================
 
+# --- Optimal-calorie world (exact calories, quality-adjusted EAR) ---
+country_exact_mean_Q <- prot2_calc %>%
+  filter(prot_level == "mean") %>%
+  group_by(iso3) %>%
+  summarise(
+    prot_EAR_exact_Q = weighted.mean(prot_inad_EAR_exact_Q,
+                                     w = population, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(parent_iso3 = normalize_iso3(iso3))
+
+map_df_exact_Q <- world %>%
+  left_join(country_exact_mean_Q, by = "parent_iso3")
+
+# Print
+print(
+  plot_protein_map_cont(
+    map_df_exact_Q, "prot_EAR_exact_Q",
+    "Protein Inadequacy (EAR, quality-adjusted) — Optimal-Calorie World",
+    cap = 0.30   # same cap as non-quality-adjusted EAR map
+  )
+)
+
+# Save
+save_map(
+  plot_protein_map_cont(
+    map_df_exact_Q, "prot_EAR_exact_Q",
+    "Protein Inadequacy (EAR, quality-adjusted) — Optimal-Calorie World",
+    cap = 0.30
+  ),
+  "map_protein_EAR_Q_optcal"
+)
+
+# --- Realistic MM world (scenario = MM, quality-adjusted EAR) ---
+country_total_MM_Q <- scen_calc %>%
+  filter(scenario_label == "MM") %>%
+  group_by(iso3) %>%
+  summarise(
+    prot_EAR_Q = weighted.mean(prot_inad_EAR_Q,
+                               w = population, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+country_total_MM_parented_Q <- country_total_MM_Q %>%
+  mutate(parent_iso3 = normalize_iso3(iso3))
+
+map_df_Q <- world %>%
+  left_join(country_total_MM_parented_Q, by = "parent_iso3")
+
+# Print
+print(
+  plot_protein_map_cont(
+    map_df_Q, "prot_EAR_Q",
+    "Protein Inadequacy (EAR, quality-adjusted) — MM scenario",
+    cap = 0.30   # same cap as non-quality-adjusted EAR MM map
+  )
+)
+
+# Save
+save_map(
+  plot_protein_map_cont(
+    map_df_Q, "prot_EAR_Q",
+    "Protein Inadequacy (EAR, quality-adjusted) — MM scenario",
+    cap = 0.30
+  ),
+  "map_protein_EAR_Q_MM"
+)
 
 cat("\n✅ Script 6 finished: optimal-calorie-world maps first; new neutral 3-color palette for difference maps.\n")

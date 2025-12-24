@@ -56,17 +56,59 @@ calorie_data_full <- readRDS("./output/final_calorie_distributions_wide.rds")
 
 cat("--- Protein and Calorie worlds have been summoned. ---\n")
 
+# --- Force Script 3 calorie columns to have unique names before joining ---
+calorie_data_full_s3 <- calorie_data_full %>%
+  rename(
+    kcal_mean_low_s3    = kcal_mean_low,
+    kcal_mean_medium_s3 = kcal_mean_medium,
+    kcal_mean_high_s3   = kcal_mean_high,
+    best_dist_calorie_s3 = best_dist,
+    cv_calorie_s3        = cv
+  ) %>%
+  select(iso3, sex, age_group,
+         kcal_mean_low_s3, kcal_mean_medium_s3, kcal_mean_high_s3,
+         best_dist_calorie_s3, cv_calorie_s3)
+
+# --- Join protein world + Script 3 calorie world (renamed) ---
+final_analysis_data <- protein_data_full %>%
+  left_join(calorie_data_full_s3, by = c("iso3", "sex", "age_group"))
+
+# --- Make the canonical calorie columns come from Script 3 ---
+final_analysis_data <- final_analysis_data %>%
+  mutate(
+    kcal_mean_low    = kcal_mean_low_s3,
+    kcal_mean_medium = kcal_mean_medium_s3,
+    kcal_mean_high   = kcal_mean_high_s3,
+    best_dist_calorie = best_dist_calorie_s3,
+    cv_calorie        = cv_calorie_s3
+  )
+
+
+
+stopifnot(!any(is.na(final_analysis_data$kcal_mean_low)))
+stopifnot(!any(is.na(final_analysis_data$kcal_mean_high)))
+stopifnot(!any(is.na(final_analysis_data$best_dist_calorie)))
+stopifnot(!any(is.na(final_analysis_data$cv_calorie)))
+
 
 # --- Step 2: Create the Final, Unified Analytical Dataset ---
 # We join the two worlds together on their common keys (iso3, sex, age_group).
 # We add suffixes to prevent any confusion with duplicate column names.
 
-final_analysis_data <- protein_data_full %>%
-  left_join(
-    calorie_data_full, 
-    by = c("iso3", "sex", "age_group"),
-    suffix = c("_protein", "_calorie") # e.g., 'cv_protein', 'cv_calorie'
+# --- Make canonical PROTEIN columns (your protein side still uses generic names) ---
+# In script2_final_results.rds, protein distribution columns are named: best_dist, cv
+# Your downstream code expects: best_dist_protein, cv_protein
+final_analysis_data <- final_analysis_data %>%
+  mutate(
+    best_dist_protein = best_dist,
+    cv_protein        = cv
   )
+
+stopifnot(!any(is.na(final_analysis_data$best_dist_protein)))
+stopifnot(!any(is.na(final_analysis_data$cv_protein)))
+
+
+
 
 # --- Sanity: make sure Stu's optimal thresholds are present (g/day) ---
 # They come from Script 1 -> Script 2 and should now be in the protein side.
@@ -271,7 +313,11 @@ calculate_inadequacy <- function(mean_intake, cv_intake, distribution_type, requ
   }
 }
 
-final_results <- final_results %>%
+final_results <- final_analysis_data %>%
+  mutate(
+    # Protein provides 4 kcal/gram
+    protein_grams_true = (kcal_mean_medium * protein_kcal_share_mean) / 4
+  ) %>%
   rowwise() %>%
   mutate(
     # A) PROTEIN inadequacy — EAR (original)
@@ -288,15 +334,23 @@ final_results <- final_results %>%
       distribution_type = best_dist_protein,
       requirement = opt_mean_g_day
     ),
-    # C) CALORIE inadequacy — MDER
+    # C) CALORIE inadequacy — MDER (realistic scenario)
     prevalence_calorie_inadequate = calculate_inadequacy(
       mean_intake = kcal_mean_medium,
+      cv_intake = cv_calorie,
+      distribution_type = best_dist_calorie,
+      requirement = mder_stratum_kcal
+    ),
+    # D) CALORIE inadequacy — MDER under "energy-adequate" mean intake (EER scenario)
+    prevalence_calorie_inadequate_EER = calculate_inadequacy(
+      mean_intake = eer_kcal_marco_mean,
       cv_intake = cv_calorie,
       distribution_type = best_dist_calorie,
       requirement = mder_stratum_kcal
     )
   ) %>%
   ungroup()
+
 
 
 
@@ -307,8 +361,10 @@ global_summary_final <- final_results %>%
   summarise(
     global_protein_inadequacy_EAR = weighted.mean(prevalence_protein_inadequate_EAR, w = population, na.rm = TRUE),
     global_protein_inadequacy_OPT = weighted.mean(prevalence_protein_inadequate_OPT, w = population, na.rm = TRUE),
-    global_calorie_inadequacy     = weighted.mean(prevalence_calorie_inadequate,     w = population, na.rm = TRUE)
+    global_calorie_inadequacy     = weighted.mean(prevalence_calorie_inadequate,     w = population, na.rm = TRUE),
+    global_calorie_inad_EER       = weighted.mean(prevalence_calorie_inadequate_EER, w = population, na.rm = TRUE)
   )
+
 
 # --- NEW: Global population-weighted averages by sex ---
 global_summary_by_sex <- final_results %>%
@@ -317,8 +373,10 @@ global_summary_by_sex <- final_results %>%
     global_protein_inadequacy_EAR = weighted.mean(prevalence_protein_inadequate_EAR, w = population, na.rm = TRUE),
     global_protein_inadequacy_OPT = weighted.mean(prevalence_protein_inadequate_OPT, w = population, na.rm = TRUE),
     global_calorie_inadequacy     = weighted.mean(prevalence_calorie_inadequate,     w = population, na.rm = TRUE),
+    global_calorie_inad_EER       = weighted.mean(prevalence_calorie_inadequate_EER, w = population, na.rm = TRUE),
     .groups = "drop"
   )
+
 
 
 cat("\n\n======================================================\n")
@@ -327,30 +385,33 @@ cat("======================================================\n\n")
 cat("Global Prevalence of Protein Inadequacy (True Intake):\n")
 cat(">>>  EAR-based: ", percent(global_summary_final$global_protein_inadequacy_EAR, accuracy = 0.1), "\n")
 cat(">>>  OPT-based: ", percent(global_summary_final$global_protein_inadequacy_OPT, accuracy = 0.1), "\n\n")
-cat("Global Prevalence of Caloric Inadequacy (True Intake):\n")
-cat(">>> ", percent(global_summary_final$global_calorie_inadequacy, accuracy = 0.1), "\n\n")
-cat("======================================================\n")
+cat("Global Prevalence of Caloric Inadequacy:\n")
+cat(">>>  Realistic (modeled intake): ", percent(global_summary_final$global_calorie_inadequacy, accuracy = 0.1), "\n")
+cat(">>>  EER scenario (mean intake = EER): ", percent(global_summary_final$global_calorie_inad_EER, accuracy = 0.1), "\n\n")
 
 
-# --- NEW: Print by-sex results ---
+
+# --- NEW: Print by-sex results (including EER-calorie counterfactual) ---
 cat("\nBy-sex global prevalences (population-weighted):\n")
-global_summary_by_sex %>%
+
+global_summary_by_sex_fmt <- global_summary_by_sex %>%
   mutate(
-    across(c(global_protein_inadequacy_EAR,
-             global_protein_inadequacy_OPT,
-             global_calorie_inadequacy),
-           ~ scales::percent(.x, accuracy = 0.1))
+    global_protein_inadequacy_EAR = scales::percent(global_protein_inadequacy_EAR, accuracy = 0.1),
+    global_protein_inadequacy_OPT = scales::percent(global_protein_inadequacy_OPT, accuracy = 0.1),
+    global_calorie_inadequacy     = scales::percent(global_calorie_inadequacy,     accuracy = 0.1),
+    global_calorie_inad_EER       = scales::percent(global_calorie_inad_EER,       accuracy = 0.1)
   ) %>%
-  arrange(sex) %>%
-  {
-    for (i in seq_len(nrow(.))) {
-      cat("\nSex:", .$sex[i], "\n")
-      cat("  Protein inadequacy (EAR): ", .$global_protein_inadequacy_EAR[i], "\n")
-      cat("  Protein inadequacy (OPT): ", .$global_protein_inadequacy_OPT[i], "\n")
-      cat("  Calorie inadequacy:      ", .$global_calorie_inadequacy[i], "\n")
-    }
-  }
+  arrange(sex)
+
+for (i in seq_len(nrow(global_summary_by_sex_fmt))) {
+  cat("\nSex:", global_summary_by_sex_fmt$sex[i], "\n")
+  cat("  Protein inadequacy (EAR): ", global_summary_by_sex_fmt$global_protein_inadequacy_EAR[i], "\n")
+  cat("  Protein inadequacy (OPT): ", global_summary_by_sex_fmt$global_protein_inadequacy_OPT[i], "\n")
+  cat("  Calorie inadequacy (realistic intake): ", global_summary_by_sex_fmt$global_calorie_inadequacy[i], "\n")
+  cat("  Calorie inadequacy (EER scenario mean): ", global_summary_by_sex_fmt$global_calorie_inad_EER[i], "\n")
+}
 cat("\n")
+
 # (Optional) Save a tidy CSV for later use
 # write_csv(global_summary_by_sex, "./output/global_summary_by_sex.csv")
 

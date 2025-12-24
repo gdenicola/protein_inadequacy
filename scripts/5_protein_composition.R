@@ -554,3 +554,11 @@ dat_quality <- dat_quality %>%
     )
   ) %>%
   ungroup()
+
+# cat("\nEND OF SCRIPT 5, about to save dat_quality.rds:\n")#
+#summary(dat_quality$kcal_mean_low)
+# summary(dat_quality$kcal_mean_high)
+# summary(dat_quality$kcal_mean_medium)
+
+saveRDS(dat_quality, "./output/dat_quality.rds")
+
