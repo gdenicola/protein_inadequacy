@@ -359,6 +359,31 @@ make_summary_blocks <- function(df, value_col, scenario_label, metric_label) {
     )
 }
 
+
+# ==============================================================
+# 4b. Helper: summaries by AGE GROUP
+# ==============================================================
+
+make_age_blocks <- function(df, value_col, scenario_label, metric_label) {
+  
+  by_age <- df %>%
+    group_by(age_group) %>%
+    summarise(
+      prevalence = weighted.mean(.data[[value_col]], w = population, na.rm = TRUE),
+      .groups    = "drop"
+    ) %>%
+    mutate(
+      group_level = "age",
+      sex         = NA_character_,
+      region_WB   = NA_character_,
+      scenario    = scenario_label,
+      metric      = metric_label
+    )
+  
+  by_age
+}
+
+
 make_mean_blocks <- function(df, value_col, scenario_label, metric_label) {
   
   # ---- GLOBAL ----
@@ -535,6 +560,32 @@ summary_prot_EAR_3scen <- bind_rows(
                       "prot_inad_EAR", "realistic_calories_high", "protein_inadequacy_EAR")
 )
 
+# ==============================================================
+# 5d. AGE summaries for LOW/MEDIUM/HIGH calorie scenarios (protein EAR)
+# ==============================================================
+
+summary_prot_EAR_age_3scen <- bind_rows(
+  make_age_blocks(
+    filter(scen3_long, calorie_scenario == "low"),
+    value_col      = "prot_inad_EAR",
+    scenario_label = "realistic_calories_low",
+    metric_label   = "protein_inadequacy_EAR"
+  ),
+  make_age_blocks(
+    filter(scen3_long, calorie_scenario == "medium"),
+    value_col      = "prot_inad_EAR",
+    scenario_label = "realistic_calories_medium",
+    metric_label   = "protein_inadequacy_EAR"
+  ),
+  make_age_blocks(
+    filter(scen3_long, calorie_scenario == "high"),
+    value_col      = "prot_inad_EAR",
+    scenario_label = "realistic_calories_high",
+    metric_label   = "protein_inadequacy_EAR"
+  )
+)
+
+
 summary_prot_OPT_3scen <- bind_rows(
   make_summary_blocks(filter(scen3_long, calorie_scenario == "low"),
                       "prot_inad_OPT", "realistic_calories_low", "protein_inadequacy_OPT"),
@@ -570,11 +621,18 @@ summary_prev_WB <- bind_rows(
   summary_cal_inad_3scen,
   summary_prot_EAR_3scen,
   summary_prot_OPT_3scen,
-  summary_prot_EAR_QA_3scen
+  summary_prot_EAR_QA_3scen,
+  
+  # --- NEW: age block for Fig2 panel C ---
+  summary_prot_EAR_age_3scen
 ) %>%
   mutate(prevalence_pct = prevalence * 100) %>%
-  select(group_level, region_WB, sex, metric, scenario, prevalence, prevalence_pct) %>%
-  arrange(metric, scenario, group_level, region_WB, sex)
+  # keep the original columns, and also keep age_group if present
+  select(group_level, region_WB, sex, age_group, metric, scenario, prevalence, prevalence_pct) %>%
+  arrange(metric, scenario, group_level, region_WB, sex, age_group)
+
+
+
 
 
 cat("\n\n=== Prevalence summaries (WB regions) ===\n")
@@ -1562,5 +1620,181 @@ ggsave(
 p_fig2_age
 
 
+# ============================================================
+# Fig2 panel C — AGE protein inadequacy (EAR)
+#   Main estimate = MEDIUM scenario (big point)
+#   Sensitivity   = LOW–HIGH scenarios (range line)
+#
+# Requires: summary_prev_WB now includes group_level == "age" and age_group
+# Output: ./output/Fig2_age_proteinEAR_medium_point_with_low_high_range.png
+# ============================================================
+
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(tidyr)
+
+df3_age <- summary_prev_WB %>%
+  filter(
+    metric == "protein_inadequacy_EAR",
+    group_level == "age",
+    scenario %in% c("realistic_calories_low", "realistic_calories_medium", "realistic_calories_high")
+  ) %>%
+  mutate(
+    scen = recode(
+      scenario,
+      realistic_calories_low    = "low",
+      realistic_calories_medium = "medium",
+      realistic_calories_high   = "high"
+    )
+  ) %>%
+  filter(!is.na(age_group)) %>%
+  group_by(age_group, scen) %>%
+  summarise(prevalence_pct = mean(prevalence_pct, na.rm = TRUE), .groups = "drop")
+
+df_wide_age <- df3_age %>%
+  pivot_wider(names_from = scen, values_from = prevalence_pct) %>%
+  mutate(
+    low    = as.numeric(low),
+    medium = as.numeric(medium),
+    high   = as.numeric(high)
+  )
+
+# Keep your existing order from the analysis (usually already ordered nicely).
+# If you want to force chronological order, set factor levels explicitly here.
+df_wide_age <- df_wide_age %>%
+  mutate(age_group = factor(age_group, levels = unique(age_group)))
+
+# ---- Force chronological order by numeric start age ----
+age_levels <- df_wide_age %>%
+  distinct(age_group) %>%
+  mutate(
+    age_start = suppressWarnings(as.numeric(sub("^([0-9]+).*", "\\1", age_group)))
+  ) %>%
+  arrange(age_start) %>%
+  pull(age_group)
+
+df_wide_age <- df_wide_age %>%
+  mutate(age_group = factor(age_group, levels = age_levels))
+
+
+# ---- 3) Order age groups using the canonical order from `dat` ----
+age_levels <- dat %>%
+  distinct(age_group) %>%
+  pull(age_group)
+
+
+
+p_fig2_age <- ggplot(df_wide_age, aes(x = age_group)) +
+  geom_linerange(
+    aes(ymin = low, ymax = high),
+    linewidth = 0.9,
+    color = "grey60"
+  ) +
+  geom_point(aes(y = low),  shape = 95, size = 6, color = "grey60") +
+  geom_point(aes(y = high), shape = 95, size = 6, color = "grey60") +
+  geom_point(aes(y = medium), size = 3.6, color = "grey15") +
+  labs(
+    x = NULL,
+    y = "Protein inadequacy (EAR), % of population",
+    title = "Protein inadequacy by age (medium scenario; low–high range)"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    plot.title  = element_text(face = "bold"),
+    plot.margin = margin(6, 6, 6, 6)
+  )
+
+ggsave(
+  filename = "./output/Fig2_age_proteinEAR_medium_point_with_low_high_range.png",
+  plot = p_fig2_age,
+  width = 9.2,
+  height = 4.8,
+  dpi = 450,
+  units = "in",
+  bg = "white",
+  limitsize = FALSE
+)
+
+p_fig2_age
+
+
+# ---- Shared y-axis upper limit for FIGURE 2 (prevalence %) ----
+ymax_common_fig2 <- max(
+  df_wide$high,
+  df_wide_sex$high,
+  df_wide_age$high,
+  na.rm = TRUE
+) * 1.5
+
+# ============================================================
+# Figure 2 — final assembly (cleaned)
+#   - Titles simplified
+#   - Y-axis label removed from panel c
+# ============================================================
+
+library(patchwork)
+
+
+
+
+
+# ---- Shared y-axis upper limit (already computed earlier) ----
+# Uses ymax_common from your previous step
+
+pA <- p_fig2 +
+  coord_cartesian(ylim = c(0, ymax_common_fig2)) +
+  labs(
+    title = "Protein inadequacy by World Bank region",
+    tag = "a"
+  ) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold")
+  )
+
+pB <- p_fig2_sex +
+  coord_cartesian(ylim = c(0, ymax_common_fig2)) +
+  labs(
+    title = "Protein inadequacy by sex",
+    tag = "b"
+  ) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold")
+  )
+
+pC <- p_fig2_age +
+  coord_cartesian(ylim = c(0, ymax_common_fig2)) +
+  labs(
+    title = "Protein inadequacy by age",
+    tag = "c",
+    y = NULL              # <-- remove y-axis label here
+  ) +
+  theme(
+    plot.title = element_text(size = 13, face = "bold")
+  )
+
+# ---- Layout: a on top, b–c below ----
+fig2_abc <- pA / (pB | pC) +
+  plot_layout(heights = c(1.1, 1)) +
+  plot_annotation(
+    theme = theme(
+      plot.margin = margin(6, 6, 6, 6)
+    )
+  )
+
+ggsave(
+  filename = "./output/Figure2_abc_panels.png",
+  plot = fig2_abc,
+  width = 14.5,
+  height = 9.2,
+  dpi = 450,
+  units = "in",
+  bg = "white",
+  limitsize = FALSE
+)
+
+fig2_abc
 
 
