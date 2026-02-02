@@ -503,7 +503,7 @@ quality_factor <- protein_props %>%
   transmute(
     iso3,
     prop_asf,
-    quality_factor_EAR = if_else(prop_asf < 0.30, 1.15, 1.00)
+    quality_factor_EAR = 1 + 0.15 * pmin(1, pmax(0, (0.40 - prop_asf) / 0.20))
   )
 
 # 2) Join to the stratum-level dataset `dat` and create adjusted EARs
