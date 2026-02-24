@@ -513,6 +513,52 @@ save_map <- function(plot, filename, width = 12, height = 6, dpi = 300) {
   message("✅ Saved (map): ", filepath)
 }
 
+# ==============================================================
+# NEW: Sex-gap map (Female − Male) in protein inadequacy (EAR), MM scenario
+#      Uses SAME continuous palette as EAR inadequacy maps
+# ==============================================================
+
+# 1) Country-level protein inadequacy (EAR) by sex, MM scenario
+country_sex_MM_EAR <- scen_calc %>%
+  filter(scenario_label == "MM", prot_level == "mean") %>%   # medium calories + mean protein share
+  group_by(iso3, sex) %>%
+  summarise(
+    prot_EAR = weighted.mean(prot_inad_EAR, w = population, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  tidyr::pivot_wider(names_from = sex, values_from = prot_EAR) %>%
+  mutate(
+    sexgap_pp = (Females - Males) * 100,       # percentage points
+    parent_iso3 = normalize_iso3(iso3)
+  )
+
+# 2) Join to world geometry (same parent/territory logic as other maps)
+map_df_sexgap <- world %>%
+  left_join(country_sex_MM_EAR, by = "parent_iso3")
+
+# 3) Plot (same palette as EAR inadequacy continuous maps)
+sexgap_map <- ggplot(map_df_sexgap) +
+  geom_sf(aes(fill = sexgap_pp), color = NA) +
+  scale_fill_gradientn(
+    colours = c("#f0f0f0", "#fdbb84", "#e34a33"),
+    limits  = c(0, 15),     # match the visual you showed (0–15 pp)
+    oob     = scales::squish,
+    breaks  = c(0, 5, 10, 15),
+    labels  = function(x) paste0(x, "%"),
+    #na.value = oi$greyNA
+  ) +
+  common_coord_sf() +
+  labs(
+    title = "Sex gap in protein inadequacy (EAR), medium-calorie scenario",
+    fill  = "Female \u2212 Male\n(pp)"
+  ) +
+  tight_map_theme()
+
+print(sexgap_map)
+
+# Save (goes to /plots via your save_map helper)
+save_map(sexgap_map, "map_sexgap_protein_EAR_MM", width = 12, height = 6, dpi = 300)
+
 plot_cat6_map <- function(df, col, title_txt) {
   ggplot(df) +
     geom_sf(aes(fill = .data[[col]]), color = NA) +
@@ -622,48 +668,67 @@ print(plot_calorie_map_cont(
 # Ratio map: Protein-to-Calorie Inadequacy (MM scenario)
 # ==============================================================
 
+# ---- Ratio map palette (soft diverging with yellow middle) ----
 ratio_palette <- c(
-  "<0.95" = "#BDB76B",  # muted olive – protein relatively lower
-  "≈ 1"   = "grey60",   # darker neutral gray – balance
-  ">1.05" = "#636363"   # dark slate – protein relatively higher
+  "Protein inadequacy lower"  = "#8CBFE6",  # lighter, less heavy blue
+  "About the same"            = "#F1D77E",  # muted yellow
+  "Protein inadequacy higher" = "#FCAE91"   # soft red (kept)
 )
+
+# ==============================================================
+# Ratio map: Protein-to-Energy Inadequacy (MM scenario) — 3-class
+#   Robust to near-zero energy inadequacy
+#   Labels are interpretive; thresholds live in caption
+# ==============================================================
+
 ratio_map_df <- function(df, prot_col, threshold_label) {
+  
   title_txt <- if (threshold_label == "OPT") {
-    "Proportion Below Optimal Protein Intake (OPT) Relative to Caloric Inadequacy"
+    "Protein inadequacy (OPT) relative to energy inadequacy"
   } else {
-    paste0("Proportion of Protein Inadequacy (", threshold_label, ") to Caloric Inadequacy")
+    paste0("Protein inadequacy (", threshold_label, ") relative to energy inadequacy")
   }
   
-  df %>%
+  df2 <- df %>%
     mutate(
-      ratio = .data[[prot_col]] / cal_MD,
+      # Avoid divide-by-zero / near-zero explosions:
+      # if energy inadequacy < 0.5 percentage points, treat ratio as undefined
+      energy_safe = ifelse(is.na(cal_MD) | cal_MD < 0.005, NA_real_, cal_MD),
+      ratio = .data[[prot_col]] / energy_safe,
+      
       ratio_cat = case_when(
-        is.na(ratio) ~ NA_character_,
-        ratio < 0.95 ~ "<0.95",
-        ratio > 1.05 ~ ">1.05",
-        TRUE         ~ "≈ 1"
+        is.na(ratio)        ~ NA_character_,
+        ratio < 0.95        ~ "Protein inadequacy lower",
+        ratio > 1.05        ~ "Protein inadequacy higher",
+        TRUE                ~ "About the same"
       ),
-      ratio_cat = factor(ratio_cat, levels = c("<0.95", "≈ 1", ">1.05"))
-    ) %>%
-    {
-      ggplot(.) +
-        geom_sf(aes(fill = ratio_cat), color = NA) +
-        scale_fill_manual(values = ratio_palette, na.value = "grey90", drop = FALSE) +
-        common_coord_sf() +
-        labs(
-          title = title_txt,
-          fill  = "Proportion"
-        ) +
-        tight_map_theme() +
-        theme(
-          legend.position   = "right",
-          legend.title      = element_text(size = 12, face = "bold"),
-          legend.key.height = unit(0.5, "cm"),
-          legend.text       = element_text(size = 11)
-        )
-    }
+      ratio_cat = factor(
+        ratio_cat,
+        levels = c("Protein inadequacy lower", "About the same", "Protein inadequacy higher")
+      )
+    )
+  
+  ggplot(df2) +
+    geom_sf(aes(fill = ratio_cat), color = NA) +
+    scale_fill_manual(
+      values   = ratio_palette,
+      #na.value = oi$greyNA,
+      drop     = FALSE
+    ) +
+    common_coord_sf() +
+    labs(
+      title = title_txt,
+      fill  = NULL
+    ) +
+    tight_map_theme() +
+    theme(
+      legend.position   = "bottom",
+      legend.direction  = "horizontal",
+      legend.key.height = unit(0.45, "cm"),
+      legend.key.width  = unit(1.6, "cm"),
+      legend.text       = element_text(size = 11)
+    )
 }
-
 
 
 # Generate and save both maps
@@ -693,6 +758,42 @@ print(
 )
 
 
+# ---- Global population-weighted averages (all scenarios) — QUALITY-ADJUSTED EAR ----
+global_scenarios_Q <- scen_calc %>%
+  group_by(prot_level, cal_scenario) %>%
+  summarise(
+    prot_inad_EAR_Q = weighted.mean(prot_inad_EAR_Q, w = population, na.rm = TRUE),
+    prot_inad_OPT   = weighted.mean(prot_inad_OPT,   w = population, na.rm = TRUE),
+    cal_inad        = weighted.mean(cal_inad,        w = population, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(prot_level, cal_scenario) %>%
+  mutate(
+    across(
+      c(prot_inad_EAR_Q, prot_inad_OPT, cal_inad),
+      ~ scales::percent(.x, accuracy = 0.1)
+    )
+  )
+
+# ---- Global population-weighted averages (all scenarios) — QUALITY-ADJUSTED EAR ----
+global_scenarios_Q <- scen_calc %>%
+  group_by(prot_level, cal_scenario) %>%
+  summarise(
+    prot_inad_EAR_Q = weighted.mean(prot_inad_EAR_Q, w = population, na.rm = TRUE),
+    prot_inad_OPT   = weighted.mean(prot_inad_OPT,   w = population, na.rm = TRUE),
+    cal_inad        = weighted.mean(cal_inad,        w = population, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(prot_level, cal_scenario) %>%
+  mutate(
+    across(
+      c(prot_inad_EAR_Q, prot_inad_OPT, cal_inad),
+      ~ scales::percent(.x, accuracy = 0.1)
+    )
+  )
+
+cat("\n=== Global population-weighted averages (all scenarios) — QUALITY-ADJUSTED EAR ===\n")
+print(global_scenarios_Q)
 
 # ---- Helper to save ggplots to ../plots ----
 save_plot <- function(plot, filename, width = 10, height = 6, dpi = 300) {
@@ -917,4 +1018,108 @@ save_map(
   "map_protein_EAR_Q_MM"
 )
 
+# ==============================================================
+# Fig 3 — 2×2 patch with SMALL gutter (no trim, no crop)
+# ==============================================================
+
+library(magick)
+
+# ---- file paths (edit only if your filenames differ) ----
+fig_paths <- list(
+  a = file.path(getwd(), "plots", "map_protein_EAR_MM.png"),
+  b = file.path(getwd(), "plots", "map_ratio_proteinEAR_to_calorie_MM.png"),
+  c = file.path(getwd(), "plots", "map_sexgap_protein_EAR_MM.png"),
+  d = file.path(getwd(), "plots", "map_share_protein_ASF.png")
+)
+
+# ---- sanity check ----
+missing <- names(fig_paths)[!file.exists(unlist(fig_paths))]
+if (length(missing) > 0) {
+  stop("Missing files: ", paste(missing, collapse = ", "),
+       "\nFix fig_paths to match the PNGs in your plots/ folder.")
+}
+
+# ---- read images (NO trimming) ----
+A <- image_read(fig_paths$a)
+B <- image_read(fig_paths$b)
+C <- image_read(fig_paths$c)
+D <- image_read(fig_paths$d)
+
+# ---- add small panel label INSIDE each map (top-right corner) ----
+add_label <- function(img, lab) {
+  image_annotate(
+    img, lab,
+    gravity  = "northeast",
+    location = "+35+25",
+    size     = 40,
+    color    = "black"
+  )
+}
+
+# A <- add_label(A, "a")
+# B <- add_label(B, "b")
+# C <- add_label(C, "c")
+# D <- add_label(D, "d")
+
+# ---- helpers to match sizes without cropping ----
+match_height <- function(left, right) {
+  hl <- image_info(left)$height
+  hr <- image_info(right)$height
+  h  <- min(hl, hr)
+  list(
+    image_scale(left,  paste0("x", h)),
+    image_scale(right, paste0("x", h))
+  )
+}
+
+match_width <- function(top, bottom) {
+  wt <- image_info(top)$width
+  wb <- image_info(bottom)$width
+  w  <- min(wt, wb)
+  list(
+    image_scale(top,    paste0(w, "x")),
+    image_scale(bottom, paste0(w, "x"))
+  )
+}
+
+# ---- build a small white spacer (gutter) ----
+# tweak gutter_px if you want: 20–60 is usually perfect
+gutter_px <- 40
+make_h_gutter <- function(height, width = gutter_px, color = "white") {
+  image_blank(width = width, height = height, color = color)
+}
+make_v_gutter <- function(width, height = gutter_px, color = "white") {
+  image_blank(width = width, height = height, color = color)
+}
+
+# ---- assemble top row with gutter ----
+ab <- match_height(A, B); A2 <- ab[[1]]; B2 <- ab[[2]]
+h_top <- image_info(A2)$height
+gH_top <- make_h_gutter(height = h_top)
+
+top_row <- image_append(c(A2, gH_top, B2), stack = FALSE)
+
+# ---- assemble bottom row with gutter ----
+cd <- match_height(C, D); C2 <- cd[[1]]; D2 <- cd[[2]]
+h_bot <- image_info(C2)$height
+gH_bot <- make_h_gutter(height = h_bot)
+
+bot_row <- image_append(c(C2, gH_bot, D2), stack = FALSE)
+
+# ---- match row widths, then stack with gutter ----
+rows <- match_width(top_row, bot_row)
+top_row2 <- rows[[1]]
+bot_row2 <- rows[[2]]
+
+w_all <- image_info(top_row2)$width
+gV <- make_v_gutter(width = w_all)
+
+fig3_2x2 <- image_append(c(top_row2, gV, bot_row2), stack = TRUE)
+
+# ---- save ----
+out_png <- file.path(getwd(), "plots", "Fig3_2x2_gutter.png")
+image_write(fig3_2x2, path = out_png, format = "png")
+message("✅ Saved: ", out_png)
+
 cat("\n✅ Script 6 finished: optimal-calorie-world maps first; new neutral 3-color palette for difference maps.\n")
+

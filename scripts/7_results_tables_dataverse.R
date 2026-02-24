@@ -9,6 +9,7 @@ library(tidyr)
 library(readr)
 library(countrycode)
 library(stringr)
+library(writexl)
 
 rm(list = ls())
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path)); setwd("..")
@@ -20,6 +21,13 @@ options(scipen = 999)
 dat <- readRDS("./output/dat_quality.rds") %>%
   distinct(iso3, sex, age_group, .keep_all = TRUE) %>%
   filter(age_group != "0-0.99")
+
+
+age_levels <- c(
+  "1–4","5–9","10–14","15–19","20–24","25–29","30–34","35–39",
+  "40–44","45–49","50–54","55–59","60–64","65–69","70–74",
+  "75–79","80–84","85–89","90–94","95–99"
+)
 
 # -----------------------------
 # Helpers
@@ -75,11 +83,17 @@ dat2 <- dat %>%
   left_join(region_lookup, by = "iso3") %>%
   mutate(
     sex = format_sex(sex),
-    age_group = format_age_endash(age_group),
     
-    # ---- FIX population once, upstream ----
+    age_group = factor(
+      format_age_endash(age_group),
+      levels = age_levels,
+      ordered = TRUE
+    ),
+    
     population = as.integer(round(population))
   )
+
+
 
 
 # ============================================================
@@ -205,18 +219,19 @@ protein_reduced <- dat2 %>%
 out_dir <- "./output/dataverse"
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
+# 1. CSV
 write_csv(protein_full,    file.path(out_dir, "protein_full.csv"),    na = "")
 write_csv(protein_reduced, file.path(out_dir, "protein_reduced.csv"), na = "")
 
+# 2. RDS (R Data Serialization - best for reloading into R later)
+saveRDS(protein_full,    file.path(out_dir, "protein_full.rds"))
+saveRDS(protein_reduced, file.path(out_dir, "protein_reduced.rds"))
+
+# 3. XLSX (Excel)
+write_xlsx(protein_full,    file.path(out_dir, "protein_full.xlsx"))
+write_xlsx(protein_reduced, file.path(out_dir, "protein_reduced.xlsx"))
+
 cat("\n✅ Dataverse exports written:\n")
-cat(" - ", normalizePath(file.path(out_dir, "protein_full.csv")), "\n")
-cat(" - ", normalizePath(file.path(out_dir, "protein_reduced.csv")), "\n")
-
-cat("\nFULL scenario counts:\n")
-print(table(protein_full$calorie_scenario, useNA = "ifany"))
-
-cat("\nFULL dimensions:\n")
-print(dim(protein_full))
-
-cat("\nREDUCED dimensions:\n")
-print(dim(protein_reduced))
+cat(" - CSVs:  ", normalizePath(out_dir), "(*.csv)\n")
+cat(" - RDS:   ", normalizePath(out_dir), "(*.rds)\n")
+cat(" - Excel: ", normalizePath(out_dir), "(*.xlsx)\n")
