@@ -219,7 +219,7 @@ waste_scenarios_plot <- ggplot(waste_scenarios_long, aes(x = gdp_per_cap_ppp, y 
   scale_color_manual(
     name = "Waste Scenario",
     values = c("low" = "darkgreen", "medium" = "darkorange", "high" = "darkred"),
-    labels = c("Low (25% max)", "Medium (30% max)", "High (35% max)")
+    labels = c("Low (0%)", "Medium (20% max)", "High (30% max)")
   ) +
   labs(
     title = "Three Modeled Scenarios for Downstream Food Waste",

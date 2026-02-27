@@ -235,3 +235,145 @@ cat("\n✅ Dataverse exports written:\n")
 cat(" - CSVs:  ", normalizePath(out_dir), "(*.csv)\n")
 cat(" - RDS:   ", normalizePath(out_dir), "(*.rds)\n")
 cat(" - Excel: ", normalizePath(out_dir), "(*.xlsx)\n")
+
+
+
+
+# ============================================================
+# EXTRA EXPORT (v2): Country + WB-region + World rows (MEDIUM scenario)
+#   - Country rows: one per iso3
+#   - WB region rows: one per WB region (population-weighted)
+#   - World row: global aggregate (population-weighted)
+#   Columns:
+#     iso3, country_name, population_2018, wb_region, world,
+#     mean_protein_pct_EAR, pct_inadequate_protein, pct_inadequate_protein_quality_adj
+# ============================================================
+
+# Safety: out_dir exists (defined above in your script, but keep robust)
+if (!exists("out_dir")) out_dir <- "./output/dataverse"
+if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+
+# ---- Base: medium scenario micro rows ----
+pf_med <- protein_full %>%
+  filter(calorie_scenario == "medium")
+
+# ---- Country rows (185-ish) ----
+country_rows <- pf_med %>%
+  group_by(iso3, country, region) %>%
+  summarise(
+    population_2018 = sum(population, na.rm = TRUE),
+    
+    mean_protein_pct_EAR = 100 * sum(population * (mean_protein_intake / protein_requirement), na.rm = TRUE) /
+      sum(population, na.rm = TRUE),
+    
+    pct_inadequate_protein = 100 * sum(ndeficient, na.rm = TRUE) / sum(population, na.rm = TRUE),
+    
+    pct_inadequate_protein_quality_adj = 100 * sum(ndeficient_adj, na.rm = TRUE) / sum(population, na.rm = TRUE),
+    
+    .groups = "drop"
+  ) %>%
+  transmute(
+    iso3 = iso3,
+    country_name = country,
+    population_2018 =  (round(population_2018)),
+    wb_region = region,
+    world = "World",
+    mean_protein_pct_EAR = round(mean_protein_pct_EAR, 2),
+    pct_inadequate_protein = round(pct_inadequate_protein, 2),
+    pct_inadequate_protein_quality_adj = round(pct_inadequate_protein_quality_adj, 2)
+  )
+
+# ---- WB region rows (one per region) ----
+region_rows <- pf_med %>%
+  group_by(region) %>%
+  summarise(
+    population_2018 = sum(population, na.rm = TRUE),
+    
+    mean_protein_pct_EAR = 100 * sum(population * (mean_protein_intake / protein_requirement), na.rm = TRUE) /
+      sum(population, na.rm = TRUE),
+    
+    pct_inadequate_protein = 100 * sum(ndeficient, na.rm = TRUE) / sum(population, na.rm = TRUE),
+    
+    pct_inadequate_protein_quality_adj = 100 * sum(ndeficient_adj, na.rm = TRUE) / sum(population, na.rm = TRUE),
+    
+    .groups = "drop"
+  ) %>%
+  transmute(
+    iso3 = NA_character_,
+    country_name = region,          # region name goes in country_name field
+    population_2018 =  (round(population_2018)),
+    wb_region = region,             # keep region also here for consistency
+    world = "World",
+    mean_protein_pct_EAR = round(mean_protein_pct_EAR, 2),
+    pct_inadequate_protein = round(pct_inadequate_protein, 2),
+    pct_inadequate_protein_quality_adj = round(pct_inadequate_protein_quality_adj, 2)
+  )
+
+# ---- World row (global) ----
+world_row <- pf_med %>%
+  summarise(
+    population_2018 = sum(population, na.rm = TRUE),
+    
+    mean_protein_pct_EAR = 100 * sum(population * (mean_protein_intake / protein_requirement), na.rm = TRUE) /
+      sum(population, na.rm = TRUE),
+    
+    pct_inadequate_protein = 100 * sum(ndeficient, na.rm = TRUE) / sum(population, na.rm = TRUE),
+    
+    pct_inadequate_protein_quality_adj = 100 * sum(ndeficient_adj, na.rm = TRUE) / sum(population, na.rm = TRUE)
+  ) %>%
+  transmute(
+    iso3 = NA_character_,
+    country_name = "World",
+    population_2018 =  (round(population_2018)),
+    wb_region = "World",
+    world = "World",
+    mean_protein_pct_EAR = round(mean_protein_pct_EAR, 2),
+    pct_inadequate_protein = round(pct_inadequate_protein, 2),
+    pct_inadequate_protein_quality_adj = round(pct_inadequate_protein_quality_adj, 2)
+  )
+
+# ---- Combine: countries + regions + world ----
+country_region_world_table_medium <- bind_rows(
+  country_rows,
+  region_rows,
+  world_row
+) %>%
+  # Nice ordering: countries first (iso3 not NA), then regions, then world
+  mutate(
+    row_type = case_when(
+      !is.na(iso3) ~ "country",
+      country_name == "World" ~ "world",
+      TRUE ~ "region"
+    )
+  ) %>%
+  arrange(
+    factor(row_type, levels = c("country", "region", "world")),
+    wb_region,
+    iso3,
+    country_name
+  ) %>%
+  select(-row_type)
+
+# -----------------------------
+# Write outputs
+# -----------------------------
+write_csv(
+  country_region_world_table_medium,
+  file.path(out_dir, "protein_country_region_world_table_medium.csv"),
+  na = ""
+)
+
+write_xlsx(
+  country_region_world_table_medium,
+  file.path(out_dir, "protein_country_region_world_table_medium.xlsx")
+)
+
+saveRDS(
+  country_region_world_table_medium,
+  file.path(out_dir, "protein_country_region_world_table_medium.rds")
+)
+
+cat("\n✅ Country + WB-region + World MEDIUM table written:\n")
+cat(" - CSV:   ", file.path(normalizePath(out_dir), "protein_country_region_world_table_medium.csv"), "\n")
+cat(" - Excel: ", file.path(normalizePath(out_dir), "protein_country_region_world_table_medium.xlsx"), "\n")
+cat(" - RDS:   ", file.path(normalizePath(out_dir), "protein_country_region_world_table_medium.rds"), "\n")
