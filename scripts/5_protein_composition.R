@@ -484,13 +484,116 @@ protein_props_named <- protein_props %>%
   arrange(desc(prop_asf))   # <-- sort by ASF share, highest first
 
 
-# library(writexl)
-# 
-# write_xlsx(
-#   protein_props_named,
-#   "./output/protein_asf_props.xlsx"
-# )
+library(writexl)
 
+write_xlsx(
+  protein_props_named,
+  "./output/protein_asf_props.xlsx"
+)
+
+
+# ============================================================
+# GOOGLE DOC READY TABLE:
+#   Total dietary protein and ASF share
+#   Country + WB region + World (2018)
+#   (NO population column)
+# ============================================================
+
+library(dplyr)
+library(countrycode)
+
+# ---- 1. Get 2018 country population totals (for weighting only) ----
+dat_quality <- readRDS("./output/dat_quality.rds")
+
+pop_iso3_2018 <- dat_quality %>%
+  group_by(iso3) %>%
+  summarise(pop_2018 = sum(population, na.rm = TRUE), .groups = "drop") %>%
+  filter(!is.na(iso3), pop_2018 > 0)
+
+# ---- 2. Merge protein shares with population + region ----
+protein_country <- protein_props %>%
+  filter(year == 2018) %>%
+  left_join(pop_iso3_2018, by = "iso3") %>%
+  mutate(
+    country = countrycode(iso3, origin = "iso3c", destination = "country.name"),
+    region  = countrycode(iso3, origin = "iso3c", destination = "region")
+  ) %>%
+  filter(!is.na(pop_2018))
+
+# ---- 3. COUNTRY rows ----
+country_rows <- protein_country %>%
+  transmute(
+    name = country,
+    total_protein,
+    prop_asf,
+    group = "country"
+  )
+
+# ---- 4. REGION rows (population-weighted) ----
+region_rows <- protein_country %>%
+  group_by(region) %>%
+  summarise(
+    total_protein = sum(pop_2018 * total_protein, na.rm = TRUE) / sum(pop_2018),
+    prop_asf      = sum(pop_2018 * prop_asf,      na.rm = TRUE) / sum(pop_2018),
+    .groups = "drop"
+  ) %>%
+  transmute(
+    name = region,
+    total_protein,
+    prop_asf,
+    group = "region"
+  )
+
+# ---- 5. WORLD row ----
+world_row <- protein_country %>%
+  summarise(
+    total_protein = sum(pop_2018 * total_protein, na.rm = TRUE) / sum(pop_2018),
+    prop_asf      = sum(pop_2018 * prop_asf,      na.rm = TRUE) / sum(pop_2018)
+  ) %>%
+  transmute(
+    name = "World",
+    total_protein,
+    prop_asf,
+    group = "world"
+  )
+
+# ---- 6. Combine and format ----
+asf_table_doc <- bind_rows(
+  world_row,
+  region_rows,
+  country_rows
+) %>%
+  mutate(
+    `Total dietary protein (g/day)` =
+      round(total_protein, 1),
+    `Protein from animal-source foods` =
+      paste0(round(100 * prop_asf, 1), "%")
+  ) %>%
+  select(
+    `Country / Region` = name,
+    `Total dietary protein (g/day)`,
+    `Protein from animal-source foods`
+  ) %>%
+  mutate(
+    row_type = case_when(
+      `Country / Region` == "World" ~ "world",
+      `Country / Region` %in% region_rows$name ~ "region",
+      TRUE ~ "country"
+    )
+  ) %>%
+  arrange(
+    factor(row_type, levels = c("world", "region", "country")),
+    `Country / Region`
+  ) %>%
+  select(-row_type)
+
+# ---- 7. Export ----
+write_xlsx(
+  asf_table_doc,
+  "./output/SI_table_total_protein_and_ASF_share_clean.xlsx"
+)
+
+cat("\n✅ Google Doc–ready ASF table exported (no population column).\n")
 
 # ==============================================================
 # Quality-adjusted EAR thresholds by country and stratum
