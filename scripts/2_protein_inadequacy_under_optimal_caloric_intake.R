@@ -33,39 +33,10 @@ population_data <- readRDS("./output/wpp2024_population_aggregated_2018.rds")
 # doi: 10.1016/S2542-5196(21)00352-1. 
 
 # GDD's caloric standardization values
-gdd_kcal_standards <- tibble::tribble(
-  ~age_group, ~standard_kcal,
-  "0-0.99",      700,
-  "1-4",        1225, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
-  # A simple weighted average is fine: (1*1000 + 3*1300)/4 = 1225. Let's use that.
-  "5-9",        1700,
-  "10-14",      2000,
-  "15-19",      2000,
-  "20-24",      2000,
-  "25-29",      2000,
-  "30-34",      2000,
-  "35-39",      2000,
-  "40-44",      2000,
-  "45-49",      2000,
-  "50-54",      2000,
-  "55-59",      2000,
-  "60-64",      2000,
-  "65-69",      2000,
-  "70-74",      2000,
-  "75-79",      1700,
-  "80-84",      1700,
-  "85-89",      1700,
-  "90-94",      1700,
-  "95-99",      1700
-)
-
-
-
-# GDD's caloric standardization values (old)
-# gdd_kcal_standards_alt <- tibble::tribble(
+# gdd_kcal_standards <- tibble::tribble(
 #   ~age_group, ~standard_kcal,
-#   "0-0.99",     700,
-#   "1-4",        1300, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
+#   "0-0.99",      700,
+#   "1-4",        1225, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
 #   # A simple weighted average is fine: (1*1000 + 3*1300)/4 = 1225. Let's use that.
 #   "5-9",        1700,
 #   "10-14",      2000,
@@ -81,12 +52,41 @@ gdd_kcal_standards <- tibble::tribble(
 #   "60-64",      2000,
 #   "65-69",      2000,
 #   "70-74",      2000,
-#   "75-79",      2000,
-#   "80-84",      2000,
-#   "85-89",      2000,
-#   "90-94",      2000,
-#   "95-99",      2000
+#   "75-79",      1700,
+#   "80-84",      1700,
+#   "85-89",      1700,
+#   "90-94",      1700,
+#   "95-99",      1700
 # )
+
+
+
+# GDD's caloric standardization values (old)
+gdd_kcal_standards <- tibble::tribble(
+  ~age_group, ~standard_kcal,
+  "0-0.99",     700,
+  "1-4",        1300, # Note: You need to decide how to handle the 1-1.99 and 2-4 split.
+  # A simple weighted average is fine: (1*1000 + 3*1300)/4 = 1225. Let's use that.
+  "5-9",        1700,
+  "10-14",      2000,
+  "15-19",      2000,
+  "20-24",      2000,
+  "25-29",      2000,
+  "30-34",      2000,
+  "35-39",      2000,
+  "40-44",      2000,
+  "45-49",      2000,
+  "50-54",      2000,
+  "55-59",      2000,
+  "60-64",      2000,
+  "65-69",      2000,
+  "70-74",      2000,
+  "75-79",      2000,
+  "80-84",      2000,
+  "85-89",      2000,
+  "90-94",      2000,
+  "95-99",      2000
+)
 #question: is it really not sex dependent? seems strange
 
 # Correcting the 1-4 group based on the components:
