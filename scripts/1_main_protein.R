@@ -611,16 +611,23 @@ gdd_data_with_weights <- gdd_data_with_weights %>%
   )
 
 
-# === JOIN EAR and OPT per-kg tables; compute absolute g/day (EAR + OPT) ===
+# === JOIN EAR, RDA, and OPT per-kg tables; compute absolute g/day ===
 gdd_data_with_abs_req <- gdd_data_with_weights %>%
   left_join(protein_ear_gdd,     by = "age_group") %>%   # EAR per-kg
-  left_join(protein_optimal_gdd, by = "age_group") %>%   # OPT per-kg (new)
+  left_join(protein_rda_gdd,     by = "age_group") %>%   # RDA per-kg
+  left_join(protein_optimal_gdd, by = "age_group") %>%   # OPT per-kg
   mutate(
-    # EAR absolute requirements (unchanged logic)
+    # EAR absolute requirements
     ear_mean_g_day = ear_g_per_kg * weight_mean_kg,
     ear_low_g_day  = ear_g_per_kg * weight_low_kg,
     ear_high_g_day = ear_g_per_kg * weight_high_kg,
-    # OPTIMAL absolute thresholds (new)
+    
+    # RDA absolute requirements
+    rda_mean_g_day = rda_g_per_kg * weight_mean_kg,
+    rda_low_g_day  = rda_g_per_kg * weight_low_kg,
+    rda_high_g_day = rda_g_per_kg * weight_high_kg,
+    
+    # OPTIMAL absolute thresholds
     opt_mean_g_day = opt_g_per_kg * weight_mean_kg,
     opt_low_g_day  = opt_g_per_kg * weight_low_kg,
     opt_high_g_day = opt_g_per_kg * weight_high_kg

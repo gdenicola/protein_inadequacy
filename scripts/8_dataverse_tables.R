@@ -904,6 +904,7 @@ cat("\n✅ Google Doc–ready SI tables exported:\n")
 cat(" - ", file.path(normalizePath(out_dir), "SI_tables_GoogleDoc_ready.xlsx"), "\n")
 
 
+
 #get proportions of protein sources from sheet data
 library(dplyr)
 library(readr)
@@ -940,3 +941,36 @@ global_asf <- pop_iso3_2018 %>%
 
 global_asf
 
+
+
+# ============================================================
+# Supplementary Table 4 — OPT inadequacy (LOW/MED/HIGH)
+#   Same structure as ST1 (EAR), but using OPT thresholds
+# ============================================================
+
+supp_table_4_OPT <- t2_wide %>%
+  select(
+    `Country / Region` = name,
+    `Population (thousands, 2018)` = pop_thousands,
+    `Mean protein intake (% OPT, Low)` = mean_pct_low,
+    `Mean protein intake (% OPT, Medium)` = mean_pct_medium,
+    `Mean protein intake (% OPT, High)` = mean_pct_high,
+    `Below optimal intake (% , Low)` = pct_inadequate_low,
+    `Below optimal intake (% , Medium)` = pct_inadequate_medium,
+    `Below optimal intake (% , High)` = pct_inadequate_high
+  )
+
+write_xlsx(
+  supp_table_4_OPT,
+  file.path(out_dir, "Supplementary_Table_4_OPT_low_med_high.xlsx")
+)
+
+write_csv(
+  supp_table_4_OPT,
+  file.path(out_dir, "Supplementary_Table_4_OPT_low_med_high.csv"),
+  na = ""
+)
+
+cat("\n✅ Supplementary Table 4 exported:\n")
+cat(" - Excel: ", file.path(normalizePath(out_dir), "Supplementary_Table_4_OPT_low_med_high.xlsx"), "\n")
+cat(" - CSV:   ", file.path(normalizePath(out_dir), "Supplementary_Table_4_OPT_low_med_high.csv"), "\n")
