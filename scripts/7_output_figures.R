@@ -4802,3 +4802,202 @@ headline_rda <- bind_rows(
   )
 
 print(headline_rda, n = nrow(headline_rda), width = Inf)
+
+
+library(dplyr)
+library(tidyr)
+
+summary_prev_WB %>%
+  filter(
+    metric == "protein_inadequacy_EAR",
+    scenario %in% c(
+      "realistic_calories_low",
+      "realistic_calories_medium",
+      "realistic_calories_high"
+    ),
+    group_level %in% c("global", "region")
+  ) %>%
+  mutate(
+    region_WB = if_else(group_level == "global", "Global", region_WB),
+    scenario = recode(
+      scenario,
+      realistic_calories_low = "Low",
+      realistic_calories_medium = "Central",
+      realistic_calories_high = "High"
+    )
+  ) %>%
+  select(region_WB, scenario, prevalence_pct) %>%
+  pivot_wider(
+    names_from = scenario,
+    values_from = prevalence_pct
+  ) %>%
+  select(region_WB, Low, Central, High) %>%
+  mutate(
+    region_WB = factor(
+      region_WB,
+      levels = c(
+        "Global",
+        setdiff(region_WB, "Global")
+      )
+    )
+  ) %>%
+  arrange(region_WB) %>%
+  mutate(
+    across(c(Low, Central, High), ~ round(.x, 1))
+  ) %>%
+  print(n = Inf, width = Inf)
+
+
+
+library(dplyr)
+library(tidyr)
+
+# ============================================================
+# Quality-adjusted EAR inadequacy:
+# 1) Global prevalence under low / central / high scenarios
+# 2) Regional prevalence under the central scenario
+# ============================================================
+
+qa_metric <- "protein_inadequacy_EAR_quality_adjusted"
+
+# ---- 1) Global QA prevalence across the three scenarios ----
+qa_global_3scen <- summary_prev_WB %>%
+  filter(
+    metric == qa_metric,
+    group_level == "global",
+    scenario %in% c(
+      "realistic_calories_low",
+      "realistic_calories_medium",
+      "realistic_calories_high"
+    )
+  ) %>%
+  mutate(
+    scenario = recode(
+      scenario,
+      realistic_calories_low = "Low",
+      realistic_calories_medium = "Central",
+      realistic_calories_high = "High"
+    ),
+    prevalence_pct = round(prevalence_pct, 1)
+  ) %>%
+  select(scenario, prevalence_pct) %>%
+  arrange(match(scenario, c("Low", "Central", "High")))
+
+cat("\n=== GLOBAL QUALITY-ADJUSTED PROTEIN INADEQUACY (%) ===\n")
+print(qa_global_3scen, n = nrow(qa_global_3scen), width = Inf)
+
+# ---- 2) Regional QA prevalence under the central scenario ----
+qa_region_central <- summary_prev_WB %>%
+  filter(
+    metric == qa_metric,
+    group_level == "region",
+    scenario == "realistic_calories_medium"
+  ) %>%
+  mutate(
+    prevalence_pct = round(prevalence_pct, 1)
+  ) %>%
+  select(region_WB, prevalence_pct) %>%
+  arrange(desc(prevalence_pct))
+
+cat("\n=== REGIONAL QUALITY-ADJUSTED PROTEIN INADEQUACY (%) - CENTRAL SCENARIO ===\n")
+print(qa_region_central, n = nrow(qa_region_central), width = Inf)
+
+
+
+library(dplyr)
+library(tidyr)
+
+# ============================================================
+# HEADLINE NUMBERS FOR "SUBOPTIMAL" INTAKES (OPT threshold)
+# Assumes:
+#   - summary_prev_WB exists
+#   - scen3_long exists
+#   - scenario labels in the object are still low/medium/high
+# ============================================================
+
+opt_metric <- "protein_inadequacy_OPT"
+
+# ------------------------------------------------------------
+# 1) Global prevalence (%) under OPT threshold across scenarios
+# ------------------------------------------------------------
+opt_global_3scen <- summary_prev_WB %>%
+  filter(
+    metric == opt_metric,
+    group_level == "global",
+    scenario %in% c(
+      "realistic_calories_low",
+      "realistic_calories_medium",
+      "realistic_calories_high"
+    )
+  ) %>%
+  mutate(
+    scenario = recode(
+      scenario,
+      realistic_calories_low    = "Low",
+      realistic_calories_medium = "Central",
+      realistic_calories_high   = "High"
+    ),
+    prevalence_pct = round(prevalence_pct, 1)
+  ) %>%
+  select(scenario, prevalence_pct) %>%
+  arrange(match(scenario, c("Low", "Central", "High")))
+
+cat("\n=== GLOBAL PREVALENCE OF SUBOPTIMAL PROTEIN INTAKE (OPT threshold, %) ===\n")
+print(opt_global_3scen, n = nrow(opt_global_3scen), width = Inf)
+
+# ------------------------------------------------------------
+# 2) Regional prevalence (%) under OPT threshold, central scenario
+# ------------------------------------------------------------
+opt_region_central <- summary_prev_WB %>%
+  filter(
+    metric == opt_metric,
+    group_level == "region",
+    scenario == "realistic_calories_medium"
+  ) %>%
+  mutate(
+    prevalence_pct = round(prevalence_pct, 1)
+  ) %>%
+  select(region_WB, prevalence_pct) %>%
+  arrange(desc(prevalence_pct))
+
+cat("\n=== REGIONAL PREVALENCE OF SUBOPTIMAL PROTEIN INTAKE (OPT threshold, %, CENTRAL scenario) ===\n")
+print(opt_region_central, n = nrow(opt_region_central), width = Inf)
+
+# ------------------------------------------------------------
+# 3) Absolute number of people globally under OPT threshold, central scenario
+# ------------------------------------------------------------
+opt_central_global_count <- scen3_long %>%
+  filter(calorie_scenario == "medium") %>%
+  summarise(
+    total_population = sum(population, na.rm = TRUE),
+    affected_people = sum(prot_inad_OPT * population, na.rm = TRUE),
+    prevalence_pct = 100 * affected_people / total_population
+  ) %>%
+  mutate(
+    affected_people_millions = round(affected_people / 1e6, 1),
+    prevalence_pct = round(prevalence_pct, 1)
+  )
+
+cat("\n=== GLOBAL NUMBER OF PEOPLE WITH SUBOPTIMAL PROTEIN INTAKE (OPT threshold, CENTRAL scenario) ===\n")
+print(opt_central_global_count, width = Inf)
+
+# ------------------------------------------------------------
+# 4) Optional: regional affected population under OPT threshold, central scenario
+# ------------------------------------------------------------
+opt_region_central_count <- scen3_long %>%
+  filter(calorie_scenario == "medium") %>%
+  group_by(region_WB) %>%
+  summarise(
+    total_population = sum(population, na.rm = TRUE),
+    affected_people = sum(prot_inad_OPT * population, na.rm = TRUE),
+    prevalence_pct = 100 * affected_people / total_population,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    affected_people_millions = round(affected_people / 1e6, 1),
+    prevalence_pct = round(prevalence_pct, 1)
+  ) %>%
+  arrange(desc(prevalence_pct))
+
+cat("\n=== REGIONAL NUMBER OF PEOPLE WITH SUBOPTIMAL PROTEIN INTAKE (OPT threshold, CENTRAL scenario) ===\n")
+print(opt_region_central_count, n = nrow(opt_region_central_count), width = Inf)
