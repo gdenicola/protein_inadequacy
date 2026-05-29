@@ -235,6 +235,8 @@ Please also cite the relevant primary data sources, including the Global Dietary
 For questions, contact:
 
 Giacomo De Nicola
+
 Harvard T.H. Chan School of Public Health
+
 [gdenicola@hsph.harvard.edu](mailto:gdenicola@hsph.harvard.edu)
 
