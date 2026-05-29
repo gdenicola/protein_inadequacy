@@ -226,7 +226,7 @@ source("scripts/999_extra_visualizations_and_analyses.R")
 
 If using this repository, please cite the associated manuscript:
 
-De Nicola G, Beal T, Nordhagen S, Phillips SM, Passarelli S, Golden CD. *Estimated Inadequate Protein Intake Worldwide.* (under review)
+De Nicola G, Beal T, Nordhagen S, Phillips SM, Passarelli S, Golden CD. *Estimated Inadequate Protein Intake Worldwide.* (in preparation)
 
 Please also cite the relevant primary data sources, including the Global Dietary Database, NCD-RisC, FAO, UN World Population Prospects, USDA FNDDS, nutriR, and Springmann’s energy intake and requirement dataset.
 
