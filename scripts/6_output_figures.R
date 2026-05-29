@@ -1,5 +1,5 @@
 # ==============================================================
-# Clean figure output script for protein inadequacy manuscript
+# Script 6: Clean figure output script for protein inadequacy manuscript
 # Produces the main-text figures only:
 #   Figure 1
 #   Figure 2

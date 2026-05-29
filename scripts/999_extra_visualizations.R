@@ -1,10 +1,10 @@
-# ==============================================================
-# Script 6 — Plots & Maps (color-blind friendly)
-#   PART A: Protein ribbon plots with "exact calories" (from Script 2)
-#   PART B: Full 3×3 scenarios (from Script 4): ribbons, boxplots, maps
-#   NEW:   Common y-axis; Robust joins; Prot vs Cal difference maps
-#          + Optimal-calorie-world maps (EAR & OPT) with same categories
-# ==============================================================
+# ARCHIVED / EXTRA OUTPUTS ONLY
+# Not required for the main manuscript pipeline.
+# Inputs:
+#   output/dat_quality.rds
+#   output/protein_asf_props.rds
+# Outputs:
+#   output/extra_plots/
 
 # ---- Libraries ----
 library(dplyr)
@@ -23,6 +23,12 @@ rm(list = ls())
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path)); setwd("..")
 options(scipen = 999)
 
+# ---- Output directory for archived/extra figures ----
+# Keep all archived/extra figures inside the main output folder.
+# This should resolve to: <project root>/output/extra_plots
+extra_plots_dir <- file.path(getwd(), "output", "extra_plots")
+dir.create(extra_plots_dir, recursive = TRUE, showWarnings = FALSE)
+message("Extra plots will be written to: ", normalizePath(extra_plots_dir, mustWork = FALSE))
 
 # Load main stratum-level dataset (with all inadequacy + extras)
 # This is the output of script 5
@@ -505,7 +511,7 @@ tight_map_theme <- function(base_size = 14) {
 
 # Map-specific saver with wide aspect to avoid letterboxing
 save_map <- function(plot, filename, width = 12, height = 6, dpi = 300) {
-  out_dir <- file.path(getwd(), "plots")
+  out_dir <- extra_plots_dir
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
   filepath <- file.path(out_dir, paste0(filename, ".png"))
   ggsave(filepath, plot = plot, width = width, height = height,
@@ -556,7 +562,7 @@ sexgap_map <- ggplot(map_df_sexgap) +
 
 print(sexgap_map)
 
-# Save (goes to /plots via your save_map helper)
+# Save (goes to output/extra_plots/ via your save_map helper)
 save_map(sexgap_map, "map_sexgap_protein_EAR_MM", width = 12, height = 6, dpi = 300)
 
 plot_cat6_map <- function(df, col, title_txt) {
@@ -795,9 +801,9 @@ global_scenarios_Q <- scen_calc %>%
 cat("\n=== Global population-weighted averages (all scenarios) — QUALITY-ADJUSTED EAR ===\n")
 print(global_scenarios_Q)
 
-# ---- Helper to save ggplots to ../plots ----
+# ---- Helper to save ggplots to output/extra_plots/ ----
 save_plot <- function(plot, filename, width = 10, height = 6, dpi = 300) {
-  out_dir <- file.path(getwd(), "plots")
+  out_dir <- extra_plots_dir
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
   filepath <- file.path(out_dir, paste0(filename, ".png"))
   ggsave(filepath, plot = plot, width = width, height = height, dpi = dpi)
@@ -942,7 +948,7 @@ seafood_map <- ggplot(map_asf_sea) +
 print(asf_map)
 print(seafood_map)
 
-# Save to ../plots using the existing helper
+# Save to output/extra_plots/ using the existing helper
 save_map(asf_map,     "map_share_protein_ASF")
 save_map(seafood_map, "map_share_protein_seafood")
 
@@ -1026,17 +1032,17 @@ library(magick)
 
 # ---- file paths (edit only if your filenames differ) ----
 fig_paths <- list(
-  a = file.path(getwd(), "plots", "map_protein_EAR_MM.png"),
-  b = file.path(getwd(), "plots", "map_ratio_proteinEAR_to_calorie_MM.png"),
-  c = file.path(getwd(), "plots", "map_sexgap_protein_EAR_MM.png"),
-  d = file.path(getwd(), "plots", "map_share_protein_ASF.png")
+  a = file.path(extra_plots_dir, "map_protein_EAR_MM.png"),
+  b = file.path(extra_plots_dir, "map_ratio_proteinEAR_to_calorie_MM.png"),
+  c = file.path(extra_plots_dir, "map_sexgap_protein_EAR_MM.png"),
+  d = file.path(extra_plots_dir, "map_share_protein_ASF.png")
 )
 
 # ---- sanity check ----
 missing <- names(fig_paths)[!file.exists(unlist(fig_paths))]
 if (length(missing) > 0) {
   stop("Missing files: ", paste(missing, collapse = ", "),
-       "\nFix fig_paths to match the PNGs in your plots/ folder.")
+       "\nFix fig_paths to match the PNGs in your output/extra_plots/ folder.")
 }
 
 # ---- read images (NO trimming) ----
@@ -1117,9 +1123,9 @@ gV <- make_v_gutter(width = w_all)
 fig3_2x2 <- image_append(c(top_row2, gV, bot_row2), stack = TRUE)
 
 # ---- save ----
-out_png <- file.path(getwd(), "plots", "Fig3_2x2_gutter.png")
+out_png <- file.path(extra_plots_dir, "Fig3_2x2_gutter.png")
 image_write(fig3_2x2, path = out_png, format = "png")
 message("✅ Saved: ", out_png)
 
-cat("\n✅ Script 6 finished: optimal-calorie-world maps first; new neutral 3-color palette for difference maps.\n")
+cat("\n✅ Extra visualizations script finished: outputs written to output/extra_plots/.\n")
 

@@ -1,5 +1,5 @@
 # ==============================================================
-# Clean supplementary table output script
+# Script 7: Clean supplementary table output script
 # Protein inadequacy manuscript
 #
 # Produces Google-Doc-ready Supplementary Tables 1-5:

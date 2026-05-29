@@ -471,10 +471,8 @@ protein_props <- protein_totals %>%
 
 
 
-
-# Save ASF / seafood protein proportions for use in Script 6
+# Save ASF / seafood protein proportions for downstream figures, tables, and exports
 saveRDS(protein_props, "./output/protein_asf_props.rds")
-
 
 protein_props_named <- protein_props %>%
   mutate(
@@ -484,12 +482,12 @@ protein_props_named <- protein_props %>%
   arrange(desc(prop_asf))   # <-- sort by ASF share, highest first
 
 
-library(writexl)
-
-write_xlsx(
-  protein_props_named,
-  "./output/protein_asf_props.xlsx"
-)
+# library(writexl)
+# 
+# write_xlsx(
+#   protein_props_named,
+#   "./output/protein_asf_props.xlsx"
+# )
 
 
 # ============================================================
@@ -502,12 +500,14 @@ write_xlsx(
 library(dplyr)
 library(countrycode)
 
-# ---- 1. Get 2018 country population totals (for weighting only) ----
-dat_quality <- readRDS("./output/dat_quality.rds")
+# ---- 1. Get 2018 country population totals from the Script 4 output ----
 
-pop_iso3_2018 <- dat_quality %>%
+pop_iso3_2018 <- dat %>%
   group_by(iso3) %>%
-  summarise(pop_2018 = sum(population, na.rm = TRUE), .groups = "drop") %>%
+  summarise(
+    pop_2018 = sum(population, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
   filter(!is.na(iso3), pop_2018 > 0)
 
 # ---- 2. Merge protein shares with population + region ----
@@ -587,13 +587,13 @@ asf_table_doc <- bind_rows(
   ) %>%
   select(-row_type)
 
-# ---- 7. Export ----
-write_xlsx(
-  asf_table_doc,
-  "./output/SI_table_total_protein_and_ASF_share_clean.xlsx"
-)
-
-cat("\n✅ Google Doc–ready ASF table exported (no population column).\n")
+# # ---- 7. Export ----
+# write_xlsx(
+#   asf_table_doc,
+#   "./output/SI_table_total_protein_and_ASF_share_clean.xlsx"
+# )
+# 
+# cat("\n✅ Google Doc–ready ASF table exported (no population column).\n")
 
 # ==============================================================
 # Quality-adjusted EAR thresholds by country and stratum
