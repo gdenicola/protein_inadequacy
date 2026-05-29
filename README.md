@@ -2,9 +2,8 @@
 
 This repository contains the code and processed outputs for the manuscript:
 
-**Estimated Inadequate Protein Intake Worldwide**
-Giacomo De Nicola, Ty Beal, Stella Nordhagen, Stuart M. Phillips, Simone Passarelli, Christopher D. Golden
-(under review)
+**Estimated Inadequate Protein Intake Worldwide**, by
+Giacomo De Nicola, Ty Beal, Stella Nordhagen, Stuart M. Phillips, Simone Passarelli, Christopher D. Golden (currently under review)
 
 The analysis estimates the prevalence of inadequate protein intake across 185 countries in 2018, disaggregated by sex and age group. It combines modeled dietary intake data, protein requirement thresholds, caloric intake scenarios, intake distribution parameters, food supply data, body-weight data, and population estimates to reconstruct country-sex-age-specific protein and energy inadequacy.
 
