@@ -1,6 +1,6 @@
 # my ignored files 
 scratch
-data
+# data
 documents 
 figures
 .DS_Store
