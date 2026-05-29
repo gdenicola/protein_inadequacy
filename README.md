@@ -58,7 +58,7 @@ output/extra_plots/
 
 The `data/` folder is not included in this GitHub repository because the underlying files are too large for version control.
 
-The data folder used to run the analysis is available from the corresponding author upon reasonable request.
+The data folder used to run the analysis is available from the corresponding author upon request.
 
 Contact:
 
