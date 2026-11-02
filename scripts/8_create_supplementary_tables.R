@@ -1,5 +1,5 @@
 # ==============================================================
-# Script 7: Clean supplementary table output script
+# Script 8: Clean supplementary table output script
 # Protein inadequacy manuscript
 #
 # Produces Google-Doc-ready Supplementary Tables 1-5:
@@ -138,7 +138,9 @@ protein_full <- dat %>%
     protein_share = protein_kcal_share_mean,
 
     protein_requirement_EAR = ear_mean_g_day,
-    protein_requirement_OPT = opt_mean_g_day,
+    protein_requirement_OPT = opt_mean_g_day,            # 1.2 g/kg/d, adults only
+    protein_requirement_T16 = tgt16_mean_g_day,          # 1.6 g/kg/d, adults only
+    protein_requirement_IAAO = iaao_ear_mean_g_day,      # 0.93 g/kg/d, adults only
     protein_requirement_EAR_QA = ear_mean_g_day_adj,
 
     best_dist_protein,
@@ -184,6 +186,18 @@ protein_full <- dat %>%
       cv_intake = cv_protein,
       distribution_type = best_dist_protein,
       requirement = protein_requirement_EAR_QA
+    ),
+    prev_T16 = calculate_inadequacy(
+      mean_intake = mean_protein_intake,
+      cv_intake = cv_protein,
+      distribution_type = best_dist_protein,
+      requirement = protein_requirement_T16
+    ),
+    prev_IAAO = calculate_inadequacy(
+      mean_intake = mean_protein_intake,
+      cv_intake = cv_protein,
+      distribution_type = best_dist_protein,
+      requirement = protein_requirement_IAAO
     )
   ) %>%
   ungroup()
@@ -376,26 +390,54 @@ supp_table_1_EAR <- build_requirement_table(
   ) %>%
   order_world_region_country()
 
+# Revision (R1.4, R1.9, R4.3): add the Monte Carlo 95% uncertainty interval for the
+# central scenario and the share of the population whose protein/energy intake
+# distribution comes from an exact nutriR country-sex-age match (from Script 6).
+t1_add_file <- file.path("output", "revision", "si_table1_additions.csv")
+if (file.exists(t1_add_file)) {
+  t1_add <- read_csv(t1_add_file, show_col_types = FALSE)
+  supp_table_1_EAR <- supp_table_1_EAR %>%
+    left_join(t1_add, by = "Country / Region")
+} else {
+  message("Note: ", t1_add_file, " not found - run Script 6 before Script 8 to add intervals and matching flags.")
+}
+
 # ==============================================================
 # Supplementary Table 2
 # Protein intake relative to optimal requirement thresholds
 # ============================================================== 
 
-supp_table_2_OPT <- build_requirement_table(
-  df = protein_full,
-  requirement_col = "protein_requirement_OPT",
-  prevalence_col = "prev_OPT"
-) %>%
+# Revision (R1.5, R1.15, R2.6): exploratory analysis, adults (20+) only.
+#   Prevalence below the IAAO EAR-type value (0.93 g/kg/d), and share of adults
+#   below the proposed target intakes of 1.2 and 1.6 g/kg/d ("share below
+#   proposed target intakes", not "inadequacy").
+protein_adults <- protein_full %>% filter(!is.na(protein_requirement_OPT))
+
+t2_iaao <- build_prevalence_only_table(protein_adults, "prev_IAAO") %>%
+  rename_with(~ paste0("iaao_", .x), starts_with("prevalence_pct"))
+t2_12 <- build_prevalence_only_table(protein_adults, "prev_OPT") %>%
+  rename_with(~ paste0("t12_", .x), starts_with("prevalence_pct")) %>%
+  select(row_type, `Country / Region`, starts_with("t12_"))
+t2_16 <- build_prevalence_only_table(protein_adults, "prev_T16") %>%
+  rename_with(~ paste0("t16_", .x), starts_with("prevalence_pct")) %>%
+  select(row_type, `Country / Region`, starts_with("t16_"))
+
+supp_table_2_OPT <- t2_iaao %>%
+  left_join(t2_12, by = c("row_type", "Country / Region")) %>%
+  left_join(t2_16, by = c("row_type", "Country / Region")) %>%
   transmute(
     row_type,
     `Country / Region`,
-    `Population (thousands)` = round(population_thousands, 0),
-    `Mean protein intake (% OPT, Low)` = round(mean_pct_Low, 2),
-    `Mean protein intake (% OPT, Central)` = round(mean_pct_Central, 2),
-    `Mean protein intake (% OPT, High)` = round(mean_pct_High, 2),
-    `Below optimal intake (% , Low)` = round(prevalence_pct_Low, 2),
-    `Below optimal intake (% , Central)` = round(prevalence_pct_Central, 2),
-    `Below optimal intake (% , High)` = round(prevalence_pct_High, 2)
+    `Adult population (thousands)` = round(population_thousands, 0),
+    `Below 0.93 g/kg/d (IAAO EAR-type) (%, Low)`     = round(iaao_prevalence_pct_Low, 2),
+    `Below 0.93 g/kg/d (IAAO EAR-type) (%, Central)` = round(iaao_prevalence_pct_Central, 2),
+    `Below 0.93 g/kg/d (IAAO EAR-type) (%, High)`    = round(iaao_prevalence_pct_High, 2),
+    `Below 1.2 g/kg/d target intake (%, Low)`        = round(t12_prevalence_pct_Low, 2),
+    `Below 1.2 g/kg/d target intake (%, Central)`    = round(t12_prevalence_pct_Central, 2),
+    `Below 1.2 g/kg/d target intake (%, High)`       = round(t12_prevalence_pct_High, 2),
+    `Below 1.6 g/kg/d target intake (%, Low)`        = round(t16_prevalence_pct_Low, 2),
+    `Below 1.6 g/kg/d target intake (%, Central)`    = round(t16_prevalence_pct_Central, 2),
+    `Below 1.6 g/kg/d target intake (%, High)`       = round(t16_prevalence_pct_High, 2)
   ) %>%
   order_world_region_country()
 
@@ -496,11 +538,13 @@ counterfactual_full <- dat %>%
     population,
     protein_share = protein_kcal_share_mean,
     eer_kcal = eer_kcal_marco_mean,
-    protein_requirement_RDA = rda_mean_g_day
+    protein_requirement_RDA = rda_mean_g_day,
+    protein_requirement_EAR = ear_mean_g_day
   ) %>%
   mutate(
     mean_protein_intake_eer = (eer_kcal * protein_share) / 4,
-    mean_pct_RDA = 100 * mean_protein_intake_eer / protein_requirement_RDA
+    mean_pct_RDA = 100 * mean_protein_intake_eer / protein_requirement_RDA,
+    mean_pct_EAR = 100 * mean_protein_intake_eer / protein_requirement_EAR   # revision (R1.8)
   )
 
 summarise_counterfactual <- function(df, group_vars, row_type_value, name_var = NULL, name_value = NULL) {
@@ -514,6 +558,10 @@ summarise_counterfactual <- function(df, group_vars, row_type_value, name_var = 
       ),
       mean_pct_RDA = weighted_mean_safe(
         mean_pct_RDA,
+        w = population
+      ),
+      mean_pct_EAR = weighted_mean_safe(
+        mean_pct_EAR,
         w = population
       ),
       .groups = "drop"
@@ -535,6 +583,7 @@ summarise_counterfactual <- function(df, group_vars, row_type_value, name_var = 
       sex,
       population_total,
       mean_protein_g_day,
+      mean_pct_EAR,
       mean_pct_RDA
     )
 }
@@ -578,6 +627,7 @@ supp_table_5_EER_counterfactual <- bind_rows(
     values_from = c(
       population_total,
       mean_protein_g_day,
+      mean_pct_EAR,
       mean_pct_RDA
     ),
     names_glue = "{.value}_{sex}"
@@ -593,6 +643,10 @@ supp_table_5_EER_counterfactual <- bind_rows(
     `Mean protein intake (g/day, Total)` = round(mean_protein_g_day_Total, 1),
     `Mean protein intake (g/day, Female)` = round(mean_protein_g_day_Female, 1),
     `Mean protein intake (g/day, Male)` = round(mean_protein_g_day_Male, 1),
+
+    `Mean protein intake (% EAR, Total)` = round(mean_pct_EAR_Total, 1),
+    `Mean protein intake (% EAR, Female)` = round(mean_pct_EAR_Female, 1),
+    `Mean protein intake (% EAR, Male)` = round(mean_pct_EAR_Male, 1),
 
     `Mean protein intake (% RDA, Total)` = round(mean_pct_RDA_Total, 1),
     `Mean protein intake (% RDA, Female)` = round(mean_pct_RDA_Female, 1),

@@ -67,7 +67,8 @@ calorie_data_full_s3 <- calorie_data_full %>%
   ) %>%
   select(iso3, sex, age_group,
          kcal_mean_low_s3, kcal_mean_medium_s3, kcal_mean_high_s3,
-         best_dist_calorie_s3, cv_calorie_s3)
+         best_dist_calorie_s3, cv_calorie_s3,
+         any_of(c("match_tier_energy", "donor_iso3_energy")))  # revision (R1.9, R4.3)
 
 # --- Join protein world + Script 3 calorie world (renamed) ---
 final_analysis_data <- protein_data_full %>%
@@ -347,6 +348,34 @@ final_results <- final_analysis_data %>%
       cv_intake = cv_calorie,
       distribution_type = best_dist_calorie,
       requirement = mder_stratum_kcal
+    ),
+    # E) Revision (R1.5): adults only (NA below age 20)
+    #    prevalence below the IAAO EAR-type value (0.93 g/kg/d) and
+    #    share below the upper proposed target intake (1.6 g/kg/d)
+    prevalence_protein_inadequate_IAAO = calculate_inadequacy(
+      mean_intake = protein_grams_true,
+      cv_intake = cv_protein,
+      distribution_type = best_dist_protein,
+      requirement = iaao_ear_mean_g_day
+    ),
+    prevalence_protein_below_T16 = calculate_inadequacy(
+      mean_intake = protein_grams_true,
+      cv_intake = cv_protein,
+      distribution_type = best_dist_protein,
+      requirement = tgt16_mean_g_day
+    ),
+    # F) Revision (R1.16): calibration check for the low- and high-calorie scenarios
+    prevalence_calorie_inadequate_lowcal = calculate_inadequacy(
+      mean_intake = kcal_mean_low,
+      cv_intake = cv_calorie,
+      distribution_type = best_dist_calorie,
+      requirement = mder_stratum_kcal
+    ),
+    prevalence_calorie_inadequate_highcal = calculate_inadequacy(
+      mean_intake = kcal_mean_high,
+      cv_intake = cv_calorie,
+      distribution_type = best_dist_calorie,
+      requirement = mder_stratum_kcal
     )
   ) %>%
   ungroup()
@@ -415,6 +444,34 @@ cat("\n")
 # (Optional) Save a tidy CSV for later use
 # write_csv(global_summary_by_sex, "./output/global_summary_by_sex.csv")
 
+
+# --- Revision checks (R1.16 calibration; R1.5 adult-only thresholds) ---
+revision_check <- final_results %>%
+  summarise(
+    energy_inad_central = weighted.mean(prevalence_calorie_inadequate,         w = population, na.rm = TRUE),
+    energy_inad_lowcal  = weighted.mean(prevalence_calorie_inadequate_lowcal,  w = population, na.rm = TRUE),
+    energy_inad_highcal = weighted.mean(prevalence_calorie_inadequate_highcal, w = population, na.rm = TRUE),
+    adults_below_IAAO_093 = weighted.mean(prevalence_protein_inadequate_IAAO, w = population, na.rm = TRUE),
+    adults_below_12       = weighted.mean(prevalence_protein_inadequate_OPT,  w = population, na.rm = TRUE),
+    adults_below_16       = weighted.mean(prevalence_protein_below_T16,      w = population, na.rm = TRUE)
+  )
+cat("\nRevision checks (central scenario unless stated):\n")
+cat(">>>  Energy inadequacy, central (target 8%):      ", percent(revision_check$energy_inad_central, accuracy = 0.1), "\n")
+cat(">>>  Energy inadequacy, low-calorie (target 16%): ", percent(revision_check$energy_inad_lowcal,  accuracy = 0.1), "\n")
+cat(">>>  Energy inadequacy, high-calorie (zero waste):", percent(revision_check$energy_inad_highcal, accuracy = 0.1), "\n")
+cat(">>>  Adults (20+) below 0.93 g/kg/d (IAAO EAR):   ", percent(revision_check$adults_below_IAAO_093, accuracy = 0.1), "\n")
+cat(">>>  Adults (20+) below 1.2 g/kg/d:               ", percent(revision_check$adults_below_12, accuracy = 0.1), "\n")
+cat(">>>  Adults (20+) below 1.6 g/kg/d:               ", percent(revision_check$adults_below_16, accuracy = 0.1), "\n\n")
+dir.create("./output/revision", recursive = TRUE, showWarnings = FALSE)
+write_csv(revision_check, "./output/revision/script4_revision_checks.csv")
+
+# Revision (R2.4): MDER imputation for the imputation log
+tibble(
+  input = "Minimum dietary energy requirement (FAO via OWID)",
+  iso3 = countries_missing_mder$iso3,
+  imputation = ifelse(countries_missing_mder$iso3 == "MHL", "Imputed from FJI", "Not imputed")
+) %>%
+  write_csv("./output/revision/imputation_log_mder.csv")
 
 # --- (Optional) Save the final, most complete dataset ---
 saveRDS(final_results, file = "./output/final_analysis_with_all_inadequacy.rds")

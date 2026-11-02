@@ -266,6 +266,20 @@ all_matches_final <- all_matches_final %>%
 all_matches_final <- all_matches_final %>%
   select(-match_match_iso3, -match_match_sex, -match_match_age_group)
 
+# Revision (R4.3, R4.6): inputs of the donor step (Step 4), saved for the donor
+# bootstrap in Script 6. The main analysis keeps the single nearest donor above.
+dir.create("./output/revision", recursive = TRUE, showWarnings = FALSE)
+saveRDS(
+  list(
+    targets = unmatched_3 %>% select(iso3, sex, age_group),
+    shapes  = protein_nutriR %>% mutate(age_group = as.character(age_group)) %>%
+      select(iso3, sex, age_group, best_dist, cv),
+    metric  = setNames(gdd_country_means$protein_mean, gdd_country_means$iso3),
+    donors  = shape_donor_iso3s
+  ),
+  "./output/revision/donor_inputs_protein.rds"
+)
+
 
 ####NOW WE HAVE FULL MATCHING DICTIONARY#########
 ##########################################################################
@@ -287,7 +301,13 @@ gdd_distributions_lean <- gdd_distributions %>%
     iso3, sex, age_group,      # group identifiers
     gdd_mean, gdd_lower, gdd_upper,  # mean intake and uncertainty
     best_dist,                 # distribution type
-    cv                         # matched coefficient of variation
+    cv,                        # matched coefficient of variation
+    # Revision (R1.9, R2.4, R4.3): keep track of how each stratum got its
+    # nutriR shape, and from which donor stratum
+    match_tier_protein      = source_final,
+    donor_iso3_protein      = match_iso3,
+    donor_sex_protein       = match_sex,
+    donor_age_group_protein = match_age_group
   )
 
 #we now have fully specified distributions for every subgroup!
@@ -317,7 +337,8 @@ agg_values <- gdd_distributions_lean %>%
 # Step 3: Just get best_dist and cv from 2-4
 shape_info <- gdd_distributions_lean %>%
   filter(age_group == "2-4") %>%
-  select(iso3, sex, best_dist, cv)
+  select(iso3, sex, best_dist, cv,
+         match_tier_protein, donor_iso3_protein, donor_sex_protein, donor_age_group_protein)
 
 # Step 4: Merge them
 agg_1_4 <- agg_values %>%
@@ -385,24 +406,33 @@ protein_ear_gdd <- tibble::tibble(
 )
 
 
-# === Optimal per-kg thresholds by GDD age group (per Stu) ===========
-# 0–0.99: use 1y value (1.2 g/kg); 1–9: 1.2; 10–19: 1.3; 20–49: 1.2; 50+: 1.4
+# === Higher intake levels proposed in the literature (exploratory) ===========
+# Revision (R1.5, R1.15, R2.6): adults (>= 20 y) only, since the 1.2-1.6 g/kg/d
+# literature concerns adults and older adults. Children and adolescents get NA,
+# so all population-weighted summaries of these columns are adult-only.
+#   opt_g_per_kg      = 1.2 g/kg/d, primary proposed target intake (IAAO
+#                       population-safe value; DGA 2025-2030 lower bound;
+#                       PROT-AGE / ESPEN upper bound for healthy older adults).
+#                       Column name kept as "opt" so downstream scripts run unchanged.
+#   tgt16_g_per_kg    = 1.6 g/kg/d, upper proposed target intake (DGA upper bound)
+#   iaao_ear_g_per_kg = 0.93 g/kg/d, EAR-type (mean) requirement from IAAO
+#                       (Humayun et al. 2007); used as a cut-point for a
+#                       prevalence-type estimate
+# The previous 1.3 (10-19 y) and 1.4 (50+ y) values are dropped.
+adult_age_groups <- c("20-24", "25-29", "30-34", "35-39", "40-44", "45-49",
+                      "50-54", "55-59", "60-64", "65-69", "70-74",
+                      "75-79", "80-84", "85-89", "90-94", "95-99")
+
 protein_optimal_gdd <- tibble::tibble(
-  age_group = c("0-0.99", "1-4", "5-9", "10-14", "15-19",
-                "20-24", "25-29", "30-34", "35-39", "40-44", "45-49",
-                "50-54", "55-59", "60-64", "65-69", "70-74",
-                "75-79", "80-84", "85-89", "90-94", "95-99"),
-  opt_g_per_kg = c(
-    2,      # 0-0.99 → use 1y value
-    1.2,      # 1-4
-    1.2,      # 5-9
-    1.3,      # 10-14
-    1.3,      # 15-19
-    1.2,1.2,1.2,1.2,1.2,1.2,  # 20-49
-    1.4,1.4,1.4,1.4,1.4,      # 50-74
-    1.4,1.4,1.4,1.4,1.4       # 75-99
-  )
-)
+  age_group = c("0-0.99", "1-4", "5-9", "10-14", "15-19", adult_age_groups)
+) %>%
+  mutate(
+    is_adult          = age_group %in% adult_age_groups,
+    opt_g_per_kg      = ifelse(is_adult, 1.2,  NA_real_),
+    tgt16_g_per_kg    = ifelse(is_adult, 1.6,  NA_real_),
+    iaao_ear_g_per_kg = ifelse(is_adult, 0.93, NA_real_)
+  ) %>%
+  select(-is_adult)
 
 
 
@@ -603,6 +633,17 @@ if(nrow(impute_90_94_lookup) == 0) {
   cat("Number of remaining NAs for KIR/MHL 95-99 weight_mean_kg:", sum(is.na(kirmhl_check_after_impute$weight_mean_kg)), "\n")
 }
 
+# Revision (R2.4): keep a log of every imputed body-weight input
+dir.create("./output/revision", recursive = TRUE, showWarnings = FALSE)
+gdd_data_with_weights %>%
+  filter(!is.na(weight_imputed_source)) %>%
+  transmute(
+    input = "Body weight (NCD-RisC)",
+    iso3, sex, age_group,
+    imputation = weight_imputed_source
+  ) %>%
+  readr::write_csv("./output/revision/imputation_log_weights.csv")
+
 # Final clean-up: Remove the 'weight_imputed_source' and 'year' columns
 gdd_data_with_weights <- gdd_data_with_weights %>%
   select(
@@ -627,10 +668,16 @@ gdd_data_with_abs_req <- gdd_data_with_weights %>%
     rda_low_g_day  = rda_g_per_kg * weight_low_kg,
     rda_high_g_day = rda_g_per_kg * weight_high_kg,
     
-    # OPTIMAL absolute thresholds
+    # Proposed target intake, 1.2 g/kg/d (adults only; NA otherwise)
     opt_mean_g_day = opt_g_per_kg * weight_mean_kg,
     opt_low_g_day  = opt_g_per_kg * weight_low_kg,
-    opt_high_g_day = opt_g_per_kg * weight_high_kg
+    opt_high_g_day = opt_g_per_kg * weight_high_kg,
+
+    # Upper proposed target intake, 1.6 g/kg/d (adults only)
+    tgt16_mean_g_day = tgt16_g_per_kg * weight_mean_kg,
+
+    # IAAO EAR-type requirement, 0.93 g/kg/d (adults only)
+    iaao_ear_mean_g_day = iaao_ear_g_per_kg * weight_mean_kg
   )
 
 # Keep downstream code unchanged by aliasing to the old object name:

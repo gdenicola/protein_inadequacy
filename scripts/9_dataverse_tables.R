@@ -69,7 +69,7 @@ format_sex <- function(x) {
 }
 
 # -----------------------------
-# Attach country + WB region (as in your Script 7)
+# Attach country + WB region (as in your Script 8)
 #   NOTE: countrycode destination for WB region is "region"
 # -----------------------------
 region_lookup <- dat %>%
@@ -401,8 +401,10 @@ if (!exists("out_dir")) out_dir <- "./output/dataverse"
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
 # ---- Base: medium scenario micro rows ----
+# Revision (R1.5): the proposed target intake is defined for adults (20+) only,
+# so these summaries use the adult population as denominator.
 pf_med <- protein_full %>%
-  filter(calorie_scenario == "medium")
+  filter(calorie_scenario == "medium", !is.na(protein_requirement_opt))
 
 # ---- Country rows ----
 country_rows_opt <- pf_med %>%
@@ -669,9 +671,12 @@ t1_wide <- t1_long %>%
 
 # ============================================================
 # TABLE 2: OPT (low/med/high) — mean %OPT + % below OPT
+# Revision (R1.5): adults (20+) only, see above
 # ============================================================
 
-t2_country <- pf_all %>%
+pf_all_adults <- pf_all %>% filter(!is.na(protein_requirement_opt))
+
+t2_country <- pf_all_adults %>%
   group_by(calorie_scenario, iso3, country, region) %>%
   summarise(
     pop = sum(population, na.rm = TRUE),
@@ -693,7 +698,7 @@ t2_country <- pf_all %>%
     pct_inadequate = round(pct_below_OPT, 2)
   )
 
-t2_region <- pf_all %>%
+t2_region <- pf_all_adults %>%
   group_by(calorie_scenario, region) %>%
   summarise(
     pop = sum(population, na.rm = TRUE),
@@ -715,7 +720,7 @@ t2_region <- pf_all %>%
     pct_inadequate = round(pct_below_OPT, 2)
   )
 
-t2_world <- pf_all %>%
+t2_world <- pf_all_adults %>%
   group_by(calorie_scenario) %>%
   summarise(
     pop = sum(population, na.rm = TRUE),

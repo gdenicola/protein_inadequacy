@@ -597,8 +597,30 @@ asf_table_doc <- bind_rows(
 
 # ==============================================================
 # Quality-adjusted EAR thresholds by country and stratum
-#   +15% EAR if ASF share < 30%, unchanged otherwise
+#   Supplementary sensitivity analysis only (revision R1.6, R2.3).
+#   Approximates the WHO/FAO/UNU (2007) digestibility and amino acid
+#   score (PDCAAS-type) correction at diet level, using the national
+#   share of protein from animal-source foods (ASF) as a proxy:
+#     no correction when ASF share >= QF_ASF_UPPER,
+#     full correction (EAR x (1 + QF_MAX)) when ASF share <= QF_ASF_LOWER,
+#     linear in between.
+#   Central values below; the sourced grid is in Script 6:
+#     QF_MAX: 11% (Ghosh, Suri & Uauy 2012, Table 2: utilizable/total
+#             protein in regional food supplies 0.83 (African regions,
+#             i.e. +21%) to 0.90 (North America, +11%)) / 15% / 25%
+#             (Swaminathan et al. 2012, Indian diets PDCAAS ~0.80)
+#     QF_ASF_UPPER: 0.33 / 0.40 / 0.45 (Young & Pellett: at least one third
+#             of protein from animal sources; >45% with the child pattern)
+#     QF_ASF_LOWER: 0.15 / 0.20
 # ==============================================================
+QF_MAX       <- 0.15
+QF_ASF_UPPER <- 0.40
+QF_ASF_LOWER <- 0.20
+
+quality_factor_fun <- function(prop_asf, qf_max = QF_MAX,
+                               asf_upper = QF_ASF_UPPER, asf_lower = QF_ASF_LOWER) {
+  1 + qf_max * pmin(1, pmax(0, (asf_upper - prop_asf) / (asf_upper - asf_lower)))
+}
 
 # 1) Build an iso3-level quality factor from ASF share
 quality_factor <- protein_props %>%
@@ -606,7 +628,7 @@ quality_factor <- protein_props %>%
   transmute(
     iso3,
     prop_asf,
-    quality_factor_EAR = 1 + 0.15 * pmin(1, pmax(0, (0.40 - prop_asf) / 0.20))
+    quality_factor_EAR = quality_factor_fun(prop_asf)
   )
 
 # 2) Join to the stratum-level dataset `dat` and create adjusted EARs

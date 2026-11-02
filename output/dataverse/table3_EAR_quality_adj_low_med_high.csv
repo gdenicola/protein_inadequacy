@@ -1,194 +1,194 @@
 iso3,name,pop_thousands,group,pct_inadequate_QA_high,pct_inadequate_QA_low,pct_inadequate_QA_medium
-,World,7575436,world,3.54,8.13,5
-,East Asia & Pacific,2307038,region,2.3,6.06,3.66
-,Europe & Central Asia,912942,region,0.5,2.24,1.06
-,Latin America & Caribbean,624656,region,4.4,8.41,5.88
-,Middle East & North Africa,460509,region,2.46,5.25,3.5
-,North America,369802,region,0.25,2.23,0.91
-,South Asia,1828298,region,3.35,11.87,5.72
-,Sub-Saharan Africa,1072189,region,10.23,14.29,11.56
-AFG,Afghanistan,35957,country,0.36,1.1,0.53
-ALB,Albania,2861,country,0.59,3.37,1.39
-DZA,Algeria,41899,country,0.04,0.42,0.13
-AGO,Angola,30630,country,3.51,16.82,7.22
-ATG,Antigua & Barbuda,90,country,0.11,1.46,0.43
-ARG,Argentina,44152,country,0.06,0.81,0.23
-ARM,Armenia,2871,country,0.01,0.09,0.02
-AUS,Australia,25005,country,0.21,2.21,0.82
-AUT,Austria,8776,country,0.04,1.32,0.31
-AZE,Azerbaijan,9939,country,0,0.04,0.01
-BHS,Bahamas,389,country,10.43,24.24,16.75
-BHR,Bahrain,1472,country,0.19,1.39,0.6
-BGD,Bangladesh,160973,country,1.73,7.22,3.1
-BRB,Barbados,278,country,0.95,10.62,3.55
-BLR,Belarus,9376,country,5.45,12.68,8.39
-BEL,Belgium,11339,country,0,0.03,0
-BLZ,Belize,375,country,0.61,3.5,1.35
-BEN,Benin,12119,country,17.3,21.91,18.78
-BTN,Bhutan,753,country,18.55,29.15,22.88
-BOL,Bolivia,11338,country,21.89,32.97,26.39
-BIH,Bosnia & Herzegovina,3338,country,0.09,1,0.3
-BWA,Botswana,2258,country,0.03,0.39,0.11
-BRA,Brazil,203931,country,0.04,0.41,0.12
-BRN,Brunei,434,country,0.16,1.71,0.65
-BGR,Bulgaria,6938,country,1.35,11.87,4.62
+,World,7575436,world,3.54,7.41,4.72
+,East Asia & Pacific,2307038,region,2.3,5.48,3.4
+,Europe & Central Asia,912942,region,0.5,1.91,0.94
+,Latin America & Caribbean,624656,region,4.4,7.82,5.62
+,Middle East & North Africa,460509,region,2.46,4.85,3.32
+,North America,369802,region,0.25,1.79,0.75
+,South Asia,1828298,region,3.35,10.48,5.25
+,Sub-Saharan Africa,1072189,region,10.23,13.82,11.35
+AFG,Afghanistan,35957,country,0.36,0.99,0.5
+ALB,Albania,2861,country,0.59,2.85,1.23
+DZA,Algeria,41899,country,0.04,0.34,0.11
+AGO,Angola,30630,country,3.51,14.78,6.53
+ATG,Antigua & Barbuda,90,country,0.11,1.13,0.35
+ARG,Argentina,44152,country,0.06,0.63,0.19
+ARM,Armenia,2871,country,0.01,0.07,0.02
+AUS,Australia,25005,country,0.21,1.75,0.66
+AUT,Austria,8776,country,0.04,0.94,0.23
+AZE,Azerbaijan,9939,country,0,0.03,0.01
+BHS,Bahamas,389,country,10.43,22.35,15.6
+BHR,Bahrain,1472,country,0.19,1.14,0.5
+BGD,Bangladesh,160973,country,1.73,6.34,2.85
+BRB,Barbados,278,country,0.95,8.66,2.94
+BLR,Belarus,9376,country,5.45,11.67,7.86
+BEL,Belgium,11339,country,0,0.02,0
+BLZ,Belize,375,country,0.61,2.97,1.2
+BEN,Benin,12119,country,17.3,21.42,18.55
+BTN,Bhutan,753,country,18.55,27.89,22.17
+BOL,Bolivia,11338,country,21.89,31.7,25.66
+BIH,Bosnia & Herzegovina,3338,country,0.09,0.8,0.25
+BWA,Botswana,2258,country,0.03,0.31,0.09
+BRA,Brazil,203931,country,0.04,0.32,0.1
+BRN,Brunei,434,country,0.16,1.35,0.52
+BGR,Bulgaria,6938,country,1.35,9.89,3.88
 BFA,Burkina Faso,20003,country,0,0,0
-BDI,Burundi,11642,country,2.58,3.57,2.84
-KHM,Cambodia,16004,country,0.09,0.4,0.16
-CMR,Cameroon,24278,country,0.07,0.28,0.11
-CAN,Canada,37171,country,0.41,2.4,1.13
-CPV,Cape Verde,504,country,0.02,0.23,0.06
+BDI,Burundi,11642,country,2.58,3.46,2.8
+KHM,Cambodia,16004,country,0.09,0.35,0.15
+CMR,Cameroon,24278,country,0.07,0.24,0.11
+CAN,Canada,37171,country,0.41,2.01,0.97
+CPV,Cape Verde,504,country,0.02,0.18,0.05
 CAF,Central African Republic,4728,country,0.01,0.01,0.01
-TCD,Chad,15756,country,18.42,22.3,19.63
-CHL,Chile,18840,country,0,0.14,0.03
-CHN,China,1406343,country,2.69,6.81,4.23
-COL,Colombia,48792,country,1.91,13.24,5.21
-COM,Comoros,756,country,0.5,1.44,0.73
-COG,Congo - Brazzaville,5376,country,0.27,0.58,0.36
-COD,Congo - Kinshasa,87795,country,19.99,26.61,21.88
-CRI,Costa Rica,4913,country,0.34,3.23,1.12
-HRV,Croatia,3968,country,0.17,1.58,0.57
-CUB,Cuba,11104,country,0.39,1.62,0.75
-CYP,Cyprus,1265,country,0.1,2.06,0.58
-CZE,Czechia,10439,country,4.34,22.79,12
-CIV,Côte d’Ivoire,26907,country,0.05,0.23,0.09
-DNK,Denmark,5745,country,0,0.06,0.01
-DJI,Djibouti,1057,country,0.13,0.28,0.17
-DMA,Dominica,67,country,0.83,8.25,2.72
-DOM,Dominican Republic,10631,country,0.33,2.59,0.94
-ECU,Ecuador,16910,country,70.57,87.61,80.13
-EGY,Egypt,104191,country,0.02,0.38,0.09
-SLV,El Salvador,6120,country,0.39,1.91,0.79
-GNQ,Equatorial Guinea,1593,country,0.53,4,1.51
-ERI,Eritrea,3128,country,0.08,0.18,0.11
-EST,Estonia,1310,country,0.46,3.98,1.58
-SWZ,Eswatini,1145,country,19.81,48.48,30.54
-ETH,Ethiopia,110537,country,0.22,0.55,0.3
-FJI,Fiji,899,country,20.06,31.39,24.79
-FIN,Finland,5471,country,0.64,3.48,1.7
-FRA,France,64964,country,0,0.03,0
-GAB,Gabon,2174,country,18.27,29.41,23.03
-GMB,Gambia,2353,country,24.31,39.17,28.83
-GEO,Georgia,3743,country,0.17,1.21,0.45
-DEU,Germany,82695,country,0,0.03,0
+TCD,Chad,15756,country,18.42,21.9,19.45
+CHL,Chile,18840,country,0,0.1,0.02
+CHN,China,1406343,country,2.69,6.21,3.95
+COL,Colombia,48792,country,1.91,11.2,4.51
+COM,Comoros,756,country,0.5,1.31,0.69
+COG,Congo - Brazzaville,5376,country,0.27,0.53,0.35
+COD,Congo - Kinshasa,87795,country,19.99,25.93,21.59
+CRI,Costa Rica,4913,country,0.34,2.62,0.94
+HRV,Croatia,3968,country,0.17,1.27,0.47
+CUB,Cuba,11104,country,0.39,1.41,0.68
+CYP,Cyprus,1265,country,0.1,1.56,0.45
+CZE,Czechia,10439,country,4.34,19.88,10.42
+CIV,Côte d’Ivoire,26907,country,0.05,0.2,0.08
+DNK,Denmark,5745,country,0,0.04,0.01
+DJI,Djibouti,1057,country,0.13,0.26,0.17
+DMA,Dominica,67,country,0.83,6.77,2.29
+DOM,Dominican Republic,10631,country,0.33,2.12,0.8
+ECU,Ecuador,16910,country,70.57,86.49,78.88
+EGY,Egypt,104191,country,0.02,0.29,0.07
+SLV,El Salvador,6120,country,0.39,1.65,0.72
+GNQ,Equatorial Guinea,1593,country,0.53,3.31,1.29
+ERI,Eritrea,3128,country,0.08,0.17,0.1
+EST,Estonia,1310,country,0.46,3.25,1.31
+SWZ,Eswatini,1145,country,19.81,45.16,28.76
+ETH,Ethiopia,110537,country,0.22,0.5,0.28
+FJI,Fiji,899,country,20.06,30.05,24.01
+FIN,Finland,5471,country,0.64,2.94,1.46
+FRA,France,64964,country,0,0.01,0
+GAB,Gabon,2174,country,18.27,28.06,22.24
+GMB,Gambia,2353,country,24.31,37.59,28.13
+GEO,Georgia,3743,country,0.17,1.01,0.39
+DEU,Germany,82695,country,0,0.02,0
 GHA,Ghana,30106,country,0,0.02,0.01
 GRC,Greece,10634,country,0,0.02,0
-GRD,Grenada,114,country,26.04,40.13,32.29
-GTM,Guatemala,16578,country,18.57,28.29,22.41
-GIN,Guinea,12430,country,14.29,18.17,15.52
-GNB,Guinea-Bissau,1885,country,37.31,53.42,42.39
-GUY,Guyana,795,country,0.15,0.97,0.36
-HTI,Haiti,10780,country,11.86,17.37,13.59
-HND,Honduras,9629,country,17.2,24.24,19.7
-HUN,Hungary,9679,country,18.31,31.9,24.87
+GRD,Grenada,114,country,26.04,38.5,31.27
+GTM,Guatemala,16578,country,18.57,27.16,21.79
+GIN,Guinea,12430,country,14.29,17.75,15.33
+GNB,Guinea-Bissau,1885,country,37.31,51.82,41.62
+GUY,Guyana,795,country,0.15,0.81,0.32
+HTI,Haiti,10780,country,11.86,16.76,13.32
+HND,Honduras,9629,country,17.2,23.45,19.31
+HUN,Hungary,9679,country,18.31,30.21,23.74
 ISL,Iceland,353,country,0,0.01,0
-IND,India,1358101,country,3.12,12.09,5.6
-IDN,Indonesia,266686,country,0.03,0.24,0.08
-IRN,Iran,85202,country,7.23,16.33,10.76
-IRQ,Iraq,39650,country,0.35,1.27,0.6
-IRL,Ireland,4843,country,0.06,1.01,0.32
-ISR,Israel,8408,country,2.13,6.39,3.93
-ITA,Italy,59785,country,0,0.15,0.03
-JAM,Jamaica,2788,country,0.02,0.22,0.06
-JPN,Japan,125913,country,0.36,4.1,1.48
-JOR,Jordan,10346,country,0.23,0.9,0.4
-KAZ,Kazakhstan,18657,country,0,0.04,0.01
-KEN,Kenya,49286,country,25.81,33.68,28.54
-KIR,Kiribati,120,country,0.38,0.98,0.53
-KWT,Kuwait,4365,country,17.09,31,24.12
-KGZ,Kyrgyzstan,6241,country,0.37,1.17,0.58
+IND,India,1358101,country,3.12,10.57,5.1
+IDN,Indonesia,266686,country,0.03,0.2,0.07
+IRN,Iran,85202,country,7.23,15.08,10.14
+IRQ,Iraq,39650,country,0.35,1.1,0.55
+IRL,Ireland,4843,country,0.06,0.76,0.25
+ISR,Israel,8408,country,2.13,5.72,3.58
+ITA,Italy,59785,country,0,0.1,0.02
+JAM,Jamaica,2788,country,0.02,0.17,0.05
+JPN,Japan,125913,country,0.36,3.28,1.21
+JOR,Jordan,10346,country,0.23,0.81,0.38
+KAZ,Kazakhstan,18657,country,0,0.03,0
+KEN,Kenya,49286,country,25.81,32.83,28.12
+KIR,Kiribati,120,country,0.38,0.9,0.5
+KWT,Kuwait,4365,country,17.09,29.22,22.89
+KGZ,Kyrgyzstan,6241,country,0.37,1.05,0.54
 LAO,Laos,7020,country,0.03,0.06,0.04
-LVA,Latvia,1901,country,0.57,3.88,1.65
-LBN,Lebanon,5797,country,0.01,0.09,0.02
-LSO,Lesotho,2140,country,0.98,3.16,1.48
-LBR,Liberia,4838,country,0.39,0.86,0.51
-LBY,Libya,6768,country,19.17,31.47,24.63
-LTU,Lithuania,2767,country,0.12,0.9,0.36
+LVA,Latvia,1901,country,0.57,3.24,1.41
+LBN,Lebanon,5797,country,0.01,0.07,0.02
+LSO,Lesotho,2140,country,0.98,2.84,1.4
+LBR,Liberia,4838,country,0.39,0.8,0.49
+LBY,Libya,6768,country,19.17,29.97,23.71
+LTU,Lithuania,2767,country,0.12,0.73,0.31
 LUX,Luxembourg,608,country,0,0.02,0
-MDG,Madagascar,26962,country,62.78,75.85,67.08
+MDG,Madagascar,26962,country,62.78,74.69,66.46
 MWI,Malawi,18176,country,0.01,0.03,0.02
-MYS,Malaysia,32675,country,0.6,4.73,1.86
-MDV,Maldives,474,country,0.08,0.46,0.18
-MLI,Mali,19932,country,0.03,0.1,0.05
-MLT,Malta,489,country,0.39,2.25,1.06
-MHL,Marshall Islands,44,country,0.21,0.85,0.36
-MRT,Mauritania,4248,country,0.01,0.09,0.02
-MUS,Mauritius,1275,country,0.02,0.44,0.1
-MEX,Mexico,123071,country,3.63,9.41,5.92
-FSM,Micronesia (Federated States of),108,country,0.3,1.23,0.5
-MDA,Moldova,3094,country,17.2,41.34,26.71
-MNG,Mongolia,3126,country,0.07,0.31,0.13
-MNE,Montenegro,606,country,0,0.01,0
-MAR,Morocco,35374,country,2.86,5.95,3.89
-MOZ,Mozambique,28350,country,23.99,27.07,24.91
-MMR,Myanmar (Burma),51544,country,6.13,9.35,7.23
-NAM,Namibia,2536,country,0.79,4.04,1.66
-NPL,Nepal,27554,country,0.22,1.07,0.4
-NLD,Netherlands,17302,country,0,0.13,0.03
-NZL,New Zealand,4883,country,0,0.08,0.02
-NIC,Nicaragua,6308,country,0.97,3.64,1.67
-NER,Niger,21638,country,0.05,0.09,0.06
-NGA,Nigeria,200330,country,19.43,27.93,22.59
-MKD,North Macedonia,1888,country,0,0.07,0.01
-NOR,Norway,5273,country,0.04,0.64,0.22
-OMN,Oman,4528,country,0.01,0.2,0.04
-PAK,Pakistan,222488,country,5.41,15.47,8.28
+MYS,Malaysia,32675,country,0.6,3.89,1.57
+MDV,Maldives,474,country,0.08,0.38,0.16
+MLI,Mali,19932,country,0.03,0.09,0.05
+MLT,Malta,489,country,0.39,1.88,0.9
+MHL,Marshall Islands,44,country,0.21,0.75,0.33
+MRT,Mauritania,4248,country,0.01,0.07,0.02
+MUS,Mauritius,1275,country,0.02,0.32,0.08
+MEX,Mexico,123071,country,3.63,8.56,5.49
+FSM,Micronesia (Federated States of),108,country,0.3,1.09,0.46
+MDA,Moldova,3094,country,17.2,38.39,25.1
+MNG,Mongolia,3126,country,0.07,0.26,0.12
+MNE,Montenegro,606,country,0,0,0
+MAR,Morocco,35374,country,2.86,5.54,3.72
+MOZ,Mozambique,28350,country,23.99,26.76,24.77
+MMR,Myanmar (Burma),51544,country,6.13,8.97,7.05
+NAM,Namibia,2536,country,0.79,3.46,1.49
+NPL,Nepal,27554,country,0.22,0.93,0.37
+NLD,Netherlands,17302,country,0,0.1,0.02
+NZL,New Zealand,4883,country,0,0.06,0.01
+NIC,Nicaragua,6308,country,0.97,3.22,1.54
+NER,Niger,21638,country,0.05,0.08,0.05
+NGA,Nigeria,200330,country,19.43,26.96,22.08
+MKD,North Macedonia,1888,country,0,0.05,0.01
+NOR,Norway,5273,country,0.04,0.49,0.17
+OMN,Oman,4528,country,0.01,0.14,0.03
+PAK,Pakistan,222488,country,5.41,14.09,7.78
 PSE,Palestinian Territories,4759,country,0,0,0
-PAN,Panama,4126,country,0.22,1.98,0.74
-PNG,Papua New Guinea,9256,country,1.01,3,1.52
-PRY,Paraguay,6333,country,0.55,2.32,1.1
-PER,Peru,31699,country,0.71,2.84,1.37
-PHL,Philippines,107874,country,6.18,10.18,7.64
-POL,Poland,37855,country,0.27,2.59,0.97
-PRT,Portugal,10237,country,0.04,0.4,0.13
-QAT,Qatar,2752,country,0.01,0.21,0.05
-ROU,Romania,19349,country,0.17,1.49,0.56
-RUS,Russia,144900,country,0.04,0.89,0.22
-RWA,Rwanda,12256,country,14.5,17.83,15.53
-WSM,Samoa,203,country,0.78,2.21,1.19
+PAN,Panama,4126,country,0.22,1.6,0.62
+PNG,Papua New Guinea,9256,country,1.01,2.71,1.43
+PRY,Paraguay,6333,country,0.55,2.02,0.99
+PER,Peru,31699,country,0.71,2.48,1.24
+PHL,Philippines,107874,country,6.18,9.69,7.4
+POL,Poland,37855,country,0.27,2.1,0.81
+PRT,Portugal,10237,country,0.04,0.31,0.11
+QAT,Qatar,2752,country,0.01,0.15,0.04
+ROU,Romania,19349,country,0.17,1.21,0.47
+RUS,Russia,144900,country,0.04,0.67,0.17
+RWA,Rwanda,12256,country,14.5,17.49,15.37
+WSM,Samoa,203,country,0.78,2,1.11
 SAU,Saudi Arabia,29560,country,0,0,0
-SEN,Senegal,15639,country,16.02,20.79,17.58
-SRB,Serbia,6928,country,0.05,0.5,0.16
-SYC,Seychelles,115,country,0.51,5.42,1.93
-SLE,Sierra Leone,7405,country,0.01,0.03,0.01
-SGP,Singapore,5611,country,0.07,0.92,0.34
-SVK,Slovakia,5388,country,1.67,13.4,5.72
-SVN,Slovenia,2057,country,0.65,4.89,2.06
-SLB,Solomon Islands,700,country,0.71,1.34,0.88
-ZAF,South Africa,57950,country,0,0.01,0
-KOR,South Korea,51388,country,3.21,9.31,5.88
-SSD,South Sudan,10007,country,0.72,1.35,0.88
-ESP,Spain,46862,country,0.03,0.6,0.17
-LKA,Sri Lanka,21998,country,16.47,26.89,20.83
-LCA,St. Lucia,175,country,14.46,46.54,27.77
-VCT,St. Vincent & Grenadines,103,country,0.02,0.4,0.08
-SDN,Sudan,43422,country,0.04,0.21,0.07
-SUR,Suriname,592,country,0.24,3.03,0.91
-SWE,Sweden,10114,country,0.04,1.15,0.29
-CHE,Switzerland,8460,country,0.1,2.9,0.81
-SYR,Syria,19584,country,7.56,11.68,8.84
-STP,São Tomé & Príncipe,206,country,20.96,27.42,23.14
-TWN,Taiwan,23498,country,0.02,0.58,0.15
-TJK,Tajikistan,9151,country,0.13,0.38,0.19
-TZA,Tanzania,56218,country,1.72,5.06,2.53
-THA,Thailand,70794,country,3.65,20.74,9.37
+SEN,Senegal,15639,country,16.02,20.28,17.33
+SRB,Serbia,6928,country,0.05,0.4,0.13
+SYC,Seychelles,115,country,0.51,4.35,1.59
+SLE,Sierra Leone,7405,country,0.01,0.02,0.01
+SGP,Singapore,5611,country,0.07,0.71,0.27
+SVK,Slovakia,5388,country,1.67,11.27,4.81
+SVN,Slovenia,2057,country,0.65,4.03,1.73
+SLB,Solomon Islands,700,country,0.71,1.26,0.85
+ZAF,South Africa,57950,country,0,0,0
+KOR,South Korea,51388,country,3.21,8.36,5.36
+SSD,South Sudan,10007,country,0.72,1.28,0.86
+ESP,Spain,46862,country,0.03,0.45,0.13
+LKA,Sri Lanka,21998,country,16.47,25.62,20.1
+LCA,St. Lucia,175,country,14.46,42.56,25.39
+VCT,St. Vincent & Grenadines,103,country,0.02,0.3,0.06
+SDN,Sudan,43422,country,0.04,0.18,0.06
+SUR,Suriname,592,country,0.24,2.41,0.75
+SWE,Sweden,10114,country,0.04,0.84,0.21
+CHE,Switzerland,8460,country,0.1,2.15,0.6
+SYR,Syria,19584,country,7.56,11.2,8.64
+STP,São Tomé & Príncipe,206,country,20.96,26.72,22.8
+TWN,Taiwan,23498,country,0.02,0.42,0.11
+TJK,Tajikistan,9151,country,0.13,0.34,0.18
+TZA,Tanzania,56218,country,1.72,4.59,2.39
+THA,Thailand,70794,country,3.65,17.89,8.2
 TLS,Timor-Leste,1255,country,0,0,0
-TGO,Togo,8095,country,0.13,0.33,0.18
-TON,Tonga,103,country,9.2,16.18,11.59
-TTO,Trinidad & Tobago,1474,country,33.72,71.58,54.43
-TUN,Tunisia,11620,country,0.02,0.23,0.07
-TUR,Turkey,83603,country,0.05,0.73,0.21
-TKM,Turkmenistan,6563,country,0.24,1.66,0.62
-UGA,Uganda,40741,country,1.87,3.82,2.38
-UKR,Ukraine,44714,country,1,7.75,2.77
-ARE,United Arab Emirates,9297,country,0.3,3.1,1.23
-GBR,United Kingdom,66201,country,0.26,3.13,1.11
-USA,United States,332631,country,0.24,2.21,0.88
-URY,Uruguay,3357,country,0.06,0.46,0.17
-UZB,Uzbekistan,31893,country,0.26,0.89,0.44
+TGO,Togo,8095,country,0.13,0.32,0.18
+TON,Tonga,103,country,9.2,15.33,11.2
+TTO,Trinidad & Tobago,1474,country,33.72,68.18,51.17
+TUN,Tunisia,11620,country,0.02,0.18,0.06
+TUR,Turkey,83603,country,0.05,0.56,0.17
+TKM,Turkmenistan,6563,country,0.24,1.38,0.54
+UGA,Uganda,40741,country,1.87,3.58,2.3
+UKR,Ukraine,44714,country,1,6.49,2.39
+ARE,United Arab Emirates,9297,country,0.3,2.47,0.99
+GBR,United Kingdom,66201,country,0.26,2.48,0.89
+USA,United States,332631,country,0.24,1.77,0.72
+URY,Uruguay,3357,country,0.06,0.37,0.14
+UZB,Uzbekistan,31893,country,0.26,0.8,0.41
 VUT,Vanuatu,280,country,0,0.01,0.01
-VEN,Venezuela,28801,country,1.69,8.23,3.63
-VNM,Vietnam,95272,country,0,0.03,0.01
-YEM,Yemen,33392,country,0.6,0.94,0.69
-ZMB,Zambia,17625,country,0.2,0.73,0.32
-ZWE,Zimbabwe,14694,country,1,4.3,1.75
+VEN,Venezuela,28801,country,1.69,7.12,3.24
+VNM,Vietnam,95272,country,0,0.02,0
+YEM,Yemen,33392,country,0.6,0.9,0.68
+ZMB,Zambia,17625,country,0.2,0.65,0.3
+ZWE,Zimbabwe,14694,country,1,3.77,1.61

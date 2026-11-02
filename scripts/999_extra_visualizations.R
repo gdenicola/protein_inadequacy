@@ -886,7 +886,7 @@ save_map(ratio_map_OPT, "map_ratio_proteinOPT_to_calorie_MM")
 # Load ASF / seafood protein proportions (from Script 5)
 protein_props <- readRDS("./output/protein_asf_props.rds")
 
-# Keep 2018 only (to match the rest of Script 6) and normalize ISO codes
+# Keep 2018 only (to match the rest of Script 7) and normalize ISO codes
 protein_props_parented <- protein_props %>%
   filter(year == 2018) %>%
   mutate(parent_iso3 = normalize_iso3(iso3))

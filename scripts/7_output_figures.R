@@ -1,5 +1,5 @@
 # ==============================================================
-# Script 6: Clean figure output script for protein inadequacy manuscript
+# Script 7: Clean figure output script for protein inadequacy manuscript
 # Produces the main-text figures only:
 #   Figure 1
 #   Figure 2
@@ -121,10 +121,10 @@ fig_theme <- function(center_title = FALSE) {
 fig2_theme <- function() {
   fig_theme(center_title = TRUE) +
     theme(
-      panel.grid.major.y = element_line(color = "grey88", linewidth = 0.25),
+      panel.grid.major.y = element_line(color = "grey92", linewidth = 0.25),
       panel.grid.minor.y = element_blank(),
-      axis.line = element_line(color = "grey25", linewidth = 0.35),
-      axis.ticks = element_line(color = "grey25", linewidth = 0.3),
+      axis.line = element_line(color = "grey35", linewidth = 0.3),
+      axis.ticks = element_line(color = "grey35", linewidth = 0.25),
       axis.text.y = element_text(size = 6.3),
       axis.title.y = element_text(size = 6.7),
       plot.tag.position = "topleft"
@@ -388,10 +388,13 @@ p_fig1a <- ggplot(fig1a_map_df) +
     plot.margin = margin(-2, 2, 10, 2)
   )
 
+# Revision (R1.8): panel (b) is now expressed relative to the EAR (%EAR), for
+# consistency with the EAR cut-point estimates in the rest of the paper.
+# The global %RDA value is still reported in the text.
 fig1b_region_sex <- prot2_central %>%
   group_by(iso3, region_WB, sex) %>%
   summarise(
-    country_mean_pct_RDA = weighted.mean(prot_mean_pct_RDA_exact, w = population, na.rm = TRUE),
+    country_mean_pct_EAR = weighted.mean(prot_mean_pct_EAR_exact, w = population, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   filter(!is.na(region_WB), !is.na(sex)) %>%
@@ -404,28 +407,33 @@ fig1b_plot_df <- bind_rows(
 
 region_order_fig1 <- fig1b_region_sex %>%
   group_by(region_WB) %>%
-  summarise(region_median = median(country_mean_pct_RDA, na.rm = TRUE), .groups = "drop") %>%
+  summarise(region_median = median(country_mean_pct_EAR, na.rm = TRUE), .groups = "drop") %>%
   arrange(region_median) %>%
   pull(region_WB)
 
 fig1b_plot_df <- fig1b_plot_df %>%
   mutate(region_WB = factor(region_WB, levels = c("Global", region_order_fig1)))
 
-p_fig1b <- ggplot(fig1b_plot_df, aes(x = region_WB, y = country_mean_pct_RDA, fill = sex)) +
+p_fig1b <- ggplot(fig1b_plot_df, aes(x = region_WB, y = country_mean_pct_EAR, fill = sex)) +
   geom_boxplot(
     position = position_dodge(width = 0.72),
     width = 0.58,
-    outlier.shape = NA,
+    # Revision: show countries beyond the whiskers (1.5 x IQR) as small open circles,
+    # so the extreme cases named in the text (e.g. Ecuador) appear in the figure.
+    outlier.shape = 1,
+    outlier.size = 0.9,
+    outlier.stroke = 0.35,
+    outlier.colour = "grey30",
     linewidth = 0.38
   ) +
   geom_hline(yintercept = 100, linetype = "dashed", color = "grey45", linewidth = 0.42) +
   scale_fill_manual(values = sex_pal, drop = FALSE) +
-  coord_cartesian(ylim = c(0, 360)) +
+  coord_cartesian(ylim = c(0, 430)) +
   labs(
     tag = "(b)",
     title = "Country-level mean protein intake by region and sex",
     x = NULL,
-    y = "Country mean protein intake (% of RDA)",
+    y = "Country mean protein intake (% of EAR)",
     fill = NULL
   ) +
   fig_theme(center_title = TRUE) +
@@ -476,11 +484,33 @@ prep_range_df <- function(df, group_cols) {
     )
 }
 
+# Revision (R1.4, R2.m1, R4.4): Monte Carlo 95% uncertainty intervals for the
+# central scenario (from Script 6), drawn as a light band behind the central
+# estimate, with the low/high calorie scenarios as separate open triangles.
+mc_file <- file.path("output", "revision", "mc_summary.csv")
+mc_central <- if (file.exists(mc_file)) {
+  utils::read.csv(mc_file, stringsAsFactors = FALSE) %>% filter(scenario == "central", metric == "EAR")
+} else {
+  message("Note: ", mc_file, " not found - run Script 6 first to add Monte Carlo intervals to Figure 2.")
+  NULL
+}
+add_mc <- function(df, levels, key) {
+  if (is.null(mc_central)) return(df %>% mutate(mc_lo = NA_real_, mc_hi = NA_real_))
+  m <- mc_central %>%
+    filter(group_level %in% levels) %>%
+    transmute(.key = group, mc_lo = 100 * q025, mc_hi = 100 * q975)
+  df %>%
+    mutate(.key = as.character(.data[[key]])) %>%
+    left_join(m, by = ".key") %>%
+    select(-.key)
+}
+
 fig2_region <- summary_prev_WB %>%
   filter(group_level %in% c("global", "region")) %>%
   mutate(region_WB = if_else(group_level == "global", "Global", region_WB)) %>%
   filter(!is.na(region_WB)) %>%
-  prep_range_df(group_cols = "region_WB")
+  prep_range_df(group_cols = "region_WB") %>%
+  add_mc(levels = c("global", "region"), key = "region_WB")
 
 region_levels_fig2 <- fig2_region %>%
   filter(region_WB != "Global") %>%
@@ -493,11 +523,13 @@ fig2_region <- fig2_region %>%
 fig2_sex <- summary_prev_WB %>%
   filter(group_level == "sex", !is.na(sex)) %>%
   mutate(sex = factor(clean_sex(sex), levels = c("Female", "Male"))) %>%
-  prep_range_df(group_cols = "sex")
+  prep_range_df(group_cols = "sex") %>%
+  add_mc(levels = "sex", key = "sex")
 
 fig2_age <- summary_prev_WB %>%
   filter(group_level == "age", !is.na(age_group)) %>%
-  prep_range_df(group_cols = "age_group")
+  prep_range_df(group_cols = "age_group") %>%
+  add_mc(levels = "age", key = "age_group")
 
 age_levels <- fig2_age %>%
   distinct(age_group) %>%
@@ -508,43 +540,124 @@ age_levels <- fig2_age %>%
 fig2_age <- fig2_age %>%
   mutate(age_group = factor(age_group, levels = age_levels))
 
-range_point_plot <- function(df, xvar, title, y_label = "Protein inadequacy (EAR), % of population") {
-  ggplot(df, aes(x = .data[[xvar]])) +
-    geom_linerange(aes(ymin = range_min, ymax = range_max), linewidth = 0.72, color = "grey55") +
-    geom_point(aes(y = range_min), shape = 95, size = 5.2, color = "grey55") +
-    geom_point(aes(y = range_max), shape = 95, size = 5.2, color = "grey55") +
-    geom_point(aes(y = central), shape = 16, size = 2.6, color = central_point) +
-    coord_cartesian(ylim = c(0, 20)) +
-    scale_y_continuous(
-      breaks = c(0, 5, 10, 15, 20),
-      labels = percent_axis,
-      expand = expansion(mult = c(0, 0.02))
-    ) +
-    labs(x = NULL, y = y_label, title = title) +
-    fig2_theme() +
-    theme(
-      legend.position = "none",
-      axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1)
-    )
+# Revision (R1.4, R2.m1, R4.4): central scenario as a point (a, b) or line (c); Monte Carlo
+# 95% uncertainty interval for the central scenario as a light band; low- and high-calorie
+# scenarios as open triangles (up = low-calorie, down = high-calorie), joined by dashed lines
+# in (c). The y-axis is fixed at 0-20% in all panels for comparability.
+fig2_col_central <- "#1F2A44"
+fig2_col_ui      <- "#B9C6D8"
+fig2_col_scen    <- "grey45"
+fig2_dot         <- 1.9
+fig2_lab_central <- "Central scenario"
+fig2_lab_ui      <- "95% uncertainty interval (central scenario)"
+fig2_lab_scen    <- c(low = "Low-calorie scenario", high = "High-calorie scenario")
+fig2_shape_scen  <- c("Low-calorie scenario" = 24, "High-calorie scenario" = 25)
+fig2_y_label     <- "Protein inadequacy (EAR), % of population"
+
+fig2_y_scale <- list(
+  coord_cartesian(ylim = c(0, 20)),
+  scale_y_continuous(
+    breaks = c(0, 5, 10, 15, 20),
+    labels = percent_axis,
+    expand = expansion(mult = c(0, 0.02))
+  )
+)
+
+fig2_legend <- function(show) {
+  pos <- if (!show) {
+    theme(legend.position = "none")
+  } else if (utils::packageVersion("ggplot2") >= "3.5.0") {
+    theme(legend.position = "inside", legend.position.inside = c(0.01, 0.99))
+  } else {
+    theme(legend.position = c(0.01, 0.99))
+  }
+  pos + theme(
+    legend.justification = c(0, 1),
+    legend.direction = "vertical",
+    legend.text = element_text(size = 6.6),
+    legend.key.height = unit(8, "pt"),
+    legend.key.width = unit(12, "pt"),
+    legend.spacing.y = unit(0, "pt"),
+    legend.margin = margin(0, 0, 0, 0),
+    legend.background = element_blank()
+  )
 }
 
-p_fig2_region <- range_point_plot(fig2_region, "region_WB", "Protein inadequacy by region") +
-  labs(tag = "(a)")
+fig2_point_plot <- function(df, xvar, title, legend = FALSE, y_label = fig2_y_label) {
+  scen <- df %>%
+    select(all_of(xvar), low, high) %>%
+    pivot_longer(c(low, high), names_to = "scen", values_to = "prev") %>%
+    mutate(scen_lab = unname(fig2_lab_scen[scen]))
+  ggplot(df, aes(x = .data[[xvar]])) +
+    geom_linerange(aes(ymin = mc_lo, ymax = mc_hi, colour = fig2_lab_ui),
+                   linewidth = 3.4, key_glyph = "path", na.rm = TRUE) +
+    geom_point(data = scen, aes(y = prev, shape = scen_lab),
+               size = 1.05, stroke = 0.55, colour = fig2_col_scen, fill = "white", na.rm = TRUE) +
+    geom_point(aes(y = central, colour = fig2_lab_central), size = fig2_dot) +
+    scale_colour_manual(
+      NULL,
+      values = setNames(c(fig2_col_central, fig2_col_ui), c(fig2_lab_central, fig2_lab_ui)),
+      breaks = c(fig2_lab_central, fig2_lab_ui),
+      guide = guide_legend(order = 1, override.aes = list(
+        linetype = c(0, 1), shape = c(16, NA), linewidth = c(0, 3), size = c(fig2_dot, 0)
+      ))
+    ) +
+    scale_shape_manual(
+      NULL,
+      values = fig2_shape_scen,
+      breaks = names(fig2_shape_scen),
+      guide = guide_legend(order = 2, override.aes = list(size = 1.5, colour = fig2_col_scen, fill = "white"))
+    ) +
+    fig2_y_scale +
+    labs(x = NULL, y = y_label, title = title) +
+    fig2_theme() +
+    fig2_legend(legend)
+}
 
-p_fig2_sex <- range_point_plot(fig2_sex, "sex", "Protein inadequacy by sex") +
+fig2_region_labels <- c(
+  "North America" = "North\nAmerica",
+  "Europe & Central Asia" = "Europe &\nCentral Asia",
+  "South Asia" = "South\nAsia",
+  "Middle East & North Africa" = "Middle East &\nNorth Africa",
+  "East Asia & Pacific" = "East Asia &\nPacific",
+  "Latin America & Caribbean" = "Latin America\n& Caribbean",
+  "Sub-Saharan Africa" = "Sub-Saharan\nAfrica"
+)
+
+p_fig2_region <- fig2_point_plot(fig2_region, "region_WB", "Protein inadequacy by region", legend = TRUE) +
+  scale_x_discrete(labels = function(x) ifelse(x %in% names(fig2_region_labels), fig2_region_labels[x], x)) +
+  labs(tag = "(a)") +
+  theme(axis.text.x = element_text(lineheight = 0.9))
+
+p_fig2_sex <- fig2_point_plot(fig2_sex, "sex", "Protein inadequacy by sex") +
   labs(tag = "(b)") +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+  theme(plot.title.position = "plot")
 
-p_fig2_age <- range_point_plot(fig2_age, "age_group", "Protein inadequacy by age", y_label = NULL) +
-  labs(tag = "(c)") +
+fig2_age_scen <- fig2_age %>%
+  select(age_group, low, high) %>%
+  pivot_longer(c(low, high), names_to = "scen", values_to = "prev") %>%
+  mutate(shape = unname(fig2_shape_scen[fig2_lab_scen[scen]]))
+
+p_fig2_age <- ggplot(fig2_age, aes(x = age_group, group = 1)) +
+  geom_ribbon(aes(ymin = mc_lo, ymax = mc_hi), fill = fig2_col_ui, na.rm = TRUE) +
+  geom_line(data = fig2_age_scen, aes(y = prev, group = scen),
+            colour = fig2_col_scen, linewidth = 0.3, linetype = "22") +
+  geom_point(data = fig2_age_scen, aes(y = prev, group = scen, shape = I(shape)),
+             size = 0.95, stroke = 0.45, colour = fig2_col_scen, fill = "white") +
+  geom_line(aes(y = central), colour = fig2_col_central, linewidth = 0.6) +
+  geom_point(aes(y = central), colour = fig2_col_central, size = 1.3) +
+  fig2_y_scale +
+  scale_x_discrete(expand = expansion(add = 0.6)) +
+  labs(x = NULL, y = NULL, title = "Protein inadequacy by age", tag = "(c)") +
+  fig2_theme() +
   theme(
-    axis.text.x = element_text(angle = 34, hjust = 1, vjust = 1, size = 6.6),
-    plot.tag.position = c(0.10, 0.985)
+    legend.position = "none",
+    axis.text.x = element_text(angle = 34, hjust = 1, vjust = 1, size = 6.6)
   )
 
 fig2_bottom <- (p_fig2_sex | p_fig2_age) + plot_layout(widths = c(0.45, 1.55))
 fig2_abc <- p_fig2_region / fig2_bottom +
-  plot_layout(heights = c(1.02, 1)) +
+  plot_layout(heights = c(1.05, 1)) +
   plot_annotation(theme = theme(plot.margin = margin(3, 3, 3, 3)))
 
 save_png(fig2_abc, "Figure2_abc_panels.png", FIG2_WIDTH, FIG2_HEIGHT)
@@ -593,10 +706,12 @@ p_map_EAR <- ggplot(map_central_df) +
   labs(tag = "(b)", title = "Protein inadequacy (EAR)", fill = "Prevalence") +
   map_theme()
 
+# Revision (R2.7): panel (c) compares two separately estimated (marginal)
+# prevalences; labels now say so. Overlap within individuals is not identified.
 ratio_palette <- c(
-  "Protein inadequacy lower" = "#8CBFE6",
-  "About the same" = "#F1D77E",
-  "Protein inadequacy higher" = "#FCAE91"
+  "Protein prevalence lower" = "#8CBFE6",
+  "Similar" = "#F1D77E",
+  "Protein prevalence higher" = "#FCAE91"
 )
 
 map_ratio_df <- map_central_df %>%
@@ -605,11 +720,11 @@ map_ratio_df <- map_central_df %>%
     ratio = prot_EAR / energy_safe,
     ratio_cat = case_when(
       is.na(ratio) ~ NA_character_,
-      ratio < 0.95 ~ "Protein inadequacy lower",
-      ratio > 1.05 ~ "Protein inadequacy higher",
-      TRUE ~ "About the same"
+      ratio < 0.95 ~ "Protein prevalence lower",
+      ratio > 1.05 ~ "Protein prevalence higher",
+      TRUE ~ "Similar"
     ),
-    ratio_cat = factor(ratio_cat, levels = c("Protein inadequacy lower", "About the same", "Protein inadequacy higher"))
+    ratio_cat = factor(ratio_cat, levels = c("Protein prevalence lower", "Similar", "Protein prevalence higher"))
   )
 
 p_map_ratio <- ggplot(map_ratio_df) +
@@ -622,7 +737,7 @@ p_map_ratio <- ggplot(map_ratio_df) +
     guide = guide_legend(nrow = 1, byrow = TRUE)
   ) +
   common_coord_sf() +
-  labs(tag = "(c)", title = "Protein inadequacy relative to energy inadequacy", fill = NULL) +
+  labs(tag = "(c)", title = "Prevalence of protein vs energy inadequacy", fill = NULL) +
   map_theme() +
   theme(
     legend.text = element_text(size = 5.8),

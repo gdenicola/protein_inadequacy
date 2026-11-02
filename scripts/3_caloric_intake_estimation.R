@@ -132,6 +132,22 @@ calories_final_complete <- bind_rows(owid_calories, calories_to_add) %>%
 
 cat("--- Final calorie dataset created. Total countries:", nrow(calories_final_complete), "---\n")
 
+# Revision (R2.4): log of every imputed country-level input in this script
+dir.create("./output/revision", recursive = TRUE, showWarnings = FALSE)
+bind_rows(
+  tibble(input = "GDP per capita, PPP (World Bank WDI)", iso3 = "TWN",
+         imputation = "Set manually (53,000 USD PPP; not in WDI)"),
+  gdp_imputation_table %>%
+    filter(iso3 %in% countries_missing_gdp$iso3) %>%
+    transmute(input = "GDP per capita, PPP (World Bank WDI)", iso3,
+              imputation = paste0("Set manually (", format(imputed_gdp, big.mark = ","), " USD PPP)")),
+  calorie_imputation_table %>%
+    filter(iso3 %in% countries_missing_calories$iso3) %>%
+    transmute(input = "Dietary energy supply (FAO FBS via OWID)", iso3,
+              imputation = paste0("Imputed from ", proxy_iso3))
+) %>%
+  readr::write_csv("./output/revision/imputation_log_country_inputs_script3.csv")
+
 
 # ==========================================================================
 # PART 4: MODELING THREE INDEPENDENT WASTE SCENARIOS
@@ -164,9 +180,19 @@ calculate_waste_pct_low <- function(gdp) {
 #   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
 #   return(waste_percentage)
 # }
+# Revision (R1.16, R2.1): max_waste of the central and low-calorie scenarios is
+# no longer tuned by hand. WASTE_MAX_MEDIUM / WASTE_MAX_HIGH start at the values
+# used in the submitted version and are recalibrated in PART 8 (block "C2") so that
+# global energy inadequacy hits the targets below. Midpoints and slopes are
+# unchanged. The high-calorie scenario stays at zero downstream waste.
+TARGET_ENERGY_INAD_CENTRAL <- 0.08  # FAO prevalence of undernourishment, 2018 (SOFI 2026: 7.4%)
+TARGET_ENERGY_INAD_LOWCAL  <- 0.16  # double the central benchmark
+WASTE_MAX_MEDIUM <- 0.20
+WASTE_MAX_HIGH   <- 0.30
+
 calculate_waste_pct_medium <- function(gdp) {
   min_waste    <- 0.00
-  max_waste    <- 0.20
+  max_waste    <- WASTE_MAX_MEDIUM
   gdp_midpoint <- 11000
   k            <- 1
   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
@@ -177,7 +203,7 @@ calculate_waste_pct_medium <- function(gdp) {
 # 3. HIGH Waste Scenario Function
 calculate_waste_pct_high <- function(gdp) {
   min_waste    <- 0.00
-  max_waste    <- 0.30
+  max_waste    <- WASTE_MAX_HIGH
   gdp_midpoint <- 4500 
   k            <- 1
   waste_percentage <- min_waste + (max_waste - min_waste) / (1 + exp(-k * (log(gdp) - log(gdp_midpoint))))
@@ -746,7 +772,8 @@ match_shapes_for_scenario <- function(stratum_col, country_col, scenario_name) {
       kcal_mean,                 # scenario-specific mean
       best_dist,                 # distribution type
       cv,                        # coefficient of variation (repaired at source)
-      source_final               # diagnostic of where the shape came from
+      source_final,              # diagnostic of where the shape came from
+      donor_iso3 = match_iso3    # revision (R1.9, R4.3): donor country of the shape
     ) %>%
     mutate(waste_scenario = scenario_name)
   
@@ -754,8 +781,136 @@ match_shapes_for_scenario <- function(stratum_col, country_col, scenario_name) {
   stopifnot(!any(is.na(calories_distributions_lean$best_dist)))
   stopifnot(!any(is.na(calories_distributions_lean$cv)))
   
+  # revision (R4.3, R4.6): inputs of the donor step, kept for the donor bootstrap in Script 6
+  attr(calories_distributions_lean, "donor_inputs") <- list(
+    targets = unmatched_3 %>% select(iso3, sex, age_group),
+    shapes  = energy_shapes %>% select(iso3, sex, age_group, best_dist, cv),
+    metric  = setNames(ck$kcal, ck$iso3),
+    donors  = shape_donor_iso3s
+  )
   calories_distributions_lean
 }
+
+# ------------------------------------------------------------
+# C2) Revision (R1.16, R2.1): calibrate the waste functions
+#   Central scenario: global energy inadequacy = TARGET_ENERGY_INAD_CENTRAL (8%)
+#   Low-calorie scenario: = TARGET_ENERGY_INAD_LOWCAL (16%)
+#   High-calorie scenario: zero downstream waste (not calibrated)
+#
+# Within a country, stratum energy intake and stratum MDER are both scaled by the
+# same EER-based factor (here and in Script 4), so each stratum's energy
+# inadequacy depends only on the national ratio MDER / energy intake and on the
+# stratum's distribution shape and CV:
+#   gamma:      P(X < MDER) = pgamma(r, shape = 1/CV^2, scale = CV^2)
+#   log-normal: P(X < MDER) = plnorm(r, meanlog = -0.5*log(1+CV^2), sdlog = sqrt(log(1+CV^2)))
+# with r = MDER_country / kcal_country. Energy donor countries are ranked on
+# national energy supply before downstream waste (the zero-waste scenario), so
+# the matched shapes do not depend on the waste parameters; the same shapes are
+# used in all three scenarios (block D). With donors ranked on intake after
+# waste, the single-donor assignment changes as max_waste changes and the
+# calibration has no stable solution. We solve for max_waste with uniroot().
+# Infants (0-0.99) are excluded, as in Script 4.
+# ------------------------------------------------------------
+calib_shapes <- match_shapes_for_scenario(
+  stratum_col = "kcal_consumed_stratum_low",   # "low waste" = zero waste
+  country_col = "est_kcal_consumed_low",
+  scenario_name = "calibration_zero_waste"
+)
+attr(calib_shapes, "donor_inputs") <- NULL
+calib_shapes <- calib_shapes %>% select(iso3, sex, age_group, donor_iso3, best_dist, cv)
+
+owid_mder_calib <- read_csv("./data/OWID_minimum-requirement-calories.csv", show_col_types = FALSE) %>%
+  filter(Year == 2018) %>%
+  select(
+    iso3 = Code,
+    mder_kcal = `Minimum dietary energy requirement  (kcal/cap/day) | 00021056 || Value | 006128 || kilocalories per person per day`
+  ) %>%
+  filter(!is.na(iso3) & nchar(iso3) == 3)
+if (!"MHL" %in% owid_mder_calib$iso3) {
+  # same imputation as Script 4: Marshall Islands from Fiji
+  owid_mder_calib <- bind_rows(
+    owid_mder_calib,
+    tibble(iso3 = "MHL", mder_kcal = owid_mder_calib$mder_kcal[owid_mder_calib$iso3 == "FJI"])
+  )
+}
+
+calib_strata <- master_data %>%
+  select(iso3, sex, age_group, population) %>%
+  mutate(sex = norm_sex(sex), age_group = norm_age(age_group)) %>%
+  filter(age_group != "0-0.99") %>%
+  inner_join(calib_shapes %>% select(-donor_iso3), by = c("iso3", "sex", "age_group")) %>%
+  left_join(country_level_data %>% select(iso3, fao_des_kcal, gdp_per_cap_ppp), by = "iso3") %>%
+  left_join(owid_mder_calib, by = "iso3")
+stopifnot(!any(is.na(calib_strata$mder_kcal)), !any(is.na(calib_strata$fao_des_kcal)))
+
+global_energy_inadequacy <- function(max_waste, gdp_midpoint, k = 1) {
+  waste <- max_waste / (1 + exp(-k * (log(calib_strata$gdp_per_cap_ppp) - log(gdp_midpoint))))
+  r <- calib_strata$mder_kcal / (calib_strata$fao_des_kcal * (1 - waste))
+  cv <- calib_strata$cv
+  p <- ifelse(
+    calib_strata$best_dist == "gamma",
+    pgamma(r, shape = 1 / cv^2, scale = cv^2),
+    plnorm(r, meanlog = -0.5 * log(1 + cv^2), sdlog = sqrt(log(1 + cv^2)))
+  )
+  weighted.mean(p, w = calib_strata$population, na.rm = TRUE)
+}
+
+solve_max_waste <- function(target, gdp_midpoint, k = 1, upper = 0.9) {
+  f <- function(m) global_energy_inadequacy(m, gdp_midpoint, k) - target
+  if (f(0) > 0 || f(upper) < 0) {
+    stop(sprintf("Cannot reach %.1f%% energy inadequacy with max_waste in [0, %.2f] (midpoint %s).",
+                 100 * target, upper, gdp_midpoint))
+  }
+  uniroot(f, lower = 0, upper = upper, tol = 1e-8)$root
+}
+
+WASTE_MAX_MEDIUM <- solve_max_waste(TARGET_ENERGY_INAD_CENTRAL, gdp_midpoint = 11000)
+WASTE_MAX_HIGH   <- solve_max_waste(TARGET_ENERGY_INAD_LOWCAL,  gdp_midpoint = 4500)
+
+calibration_parameters <- tibble(
+  scenario       = c("high-calorie (zero waste)", "central", "low-calorie"),
+  waste_function = c("calculate_waste_pct_low", "calculate_waste_pct_medium", "calculate_waste_pct_high"),
+  min_waste      = 0,
+  max_waste      = c(0, WASTE_MAX_MEDIUM, WASTE_MAX_HIGH),
+  gdp_midpoint   = c(NA, 11000, 4500),
+  k              = c(NA, 1, 1),
+  target_global_energy_inadequacy   = c(NA, TARGET_ENERGY_INAD_CENTRAL, TARGET_ENERGY_INAD_LOWCAL),
+  implied_global_energy_inadequacy  = c(
+    global_energy_inadequacy(0, 11000),
+    global_energy_inadequacy(WASTE_MAX_MEDIUM, 11000),
+    global_energy_inadequacy(WASTE_MAX_HIGH, 4500)
+  )
+)
+print(calibration_parameters)
+write_csv(calibration_parameters, "./output/revision/calibration_parameters.csv")
+
+# Recompute the national scenarios and their stratum disaggregation with the
+# calibrated waste functions (same code as PART 4b and PART 6b above)
+country_level_data_scenarios <- country_level_data %>%
+  mutate(
+    est_kcal_consumed_low    = fao_des_kcal * (1 - calculate_waste_pct_low(gdp_per_cap_ppp)),
+    est_kcal_consumed_medium = fao_des_kcal * (1 - calculate_waste_pct_medium(gdp_per_cap_ppp)),
+    est_kcal_consumed_high   = fao_des_kcal * (1 - calculate_waste_pct_high(gdp_per_cap_ppp))
+  )
+
+analysis_data_full <- master_data %>%
+  left_join(
+    country_level_data_scenarios %>% select(iso3, est_kcal_consumed_low, est_kcal_consumed_medium, est_kcal_consumed_high),
+    by = "iso3"
+  )
+
+disaggregated_data <- analysis_data_full %>%
+  group_by(iso3) %>%
+  mutate(
+    avg_country_eer = weighted.mean(eer_kcal_marco_mean, w = population, na.rm = TRUE),
+    adjustment_factor = eer_kcal_marco_mean / avg_country_eer
+  ) %>%
+  ungroup() %>%
+  mutate(
+    kcal_consumed_stratum_low    = est_kcal_consumed_low * adjustment_factor,
+    kcal_consumed_stratum_medium = est_kcal_consumed_medium * adjustment_factor,
+    kcal_consumed_stratum_high   = est_kcal_consumed_high * adjustment_factor
+  )
 
 # ------------------------------------------------------------
 # D) Run the matcher for LOW, MEDIUM, HIGH and save results
@@ -776,6 +931,28 @@ res_high   <- match_shapes_for_scenario(
   scenario_name = "high"
 )
 
+# Revision (R4.3, R4.6): inputs of the zero-waste donor step (the shapes used in
+# all scenarios), with what Script 6 needs to re-calibrate the central waste
+donor_inputs_energy <- attr(res_low, "donor_inputs")
+donor_inputs_energy$country      <- country_level_data %>% select(iso3, fao_des_kcal, gdp_per_cap_ppp)
+donor_inputs_energy$max_waste    <- WASTE_MAX_MEDIUM
+donor_inputs_energy$gdp_midpoint <- 11000
+donor_inputs_energy$k_slope      <- 1
+donor_inputs_energy$target       <- TARGET_ENERGY_INAD_CENTRAL
+saveRDS(donor_inputs_energy, "./output/revision/donor_inputs_energy.rds")
+attr(res_low, "donor_inputs") <- NULL
+attr(res_med, "donor_inputs") <- NULL
+attr(res_high, "donor_inputs") <- NULL
+
+# the shapes applied below must be the ones used in the calibration
+chk_shapes <- res_low %>% select(iso3, sex, age_group, donor_iso3, best_dist, cv) %>%
+  arrange(iso3, sex, age_group)
+chk_calib <- calib_shapes %>% arrange(iso3, sex, age_group)
+if (!(nrow(chk_shapes) == nrow(chk_calib) && all(chk_shapes$donor_iso3 == chk_calib$donor_iso3) &&
+      isTRUE(all.equal(chk_shapes$cv, chk_calib$cv)))) {
+  warning("Zero-waste shapes differ from the shapes used in the waste calibration.")
+}
+
 # ------------------------------------------------------------
 # Build wide (one row per iso3/sex/age) with scenario-invariant shapes from MEDIUM
 # ------------------------------------------------------------
@@ -792,10 +969,13 @@ wide_kcal <- calories_distributions_all %>%
     names_prefix = "kcal_mean_"
   )
 
-# 3) Scenario-invariant shape/CV: TAKE FROM MEDIUM ONLY
+# 3) Scenario-invariant shape/CV: TAKE FROM THE ZERO-WASTE MATCHING
+#    Revision (R1.16): donors ranked on energy supply before waste, the shapes
+#    the waste calibration uses (block C2); previously taken from MEDIUM.
 #    This guarantees a single row per key for the shapes.
-shape_cv_unique <- res_med %>%
-  select(iso3, sex, age_group, best_dist, cv) %>%
+shape_cv_unique <- res_low %>%
+  select(iso3, sex, age_group, best_dist, cv,
+         match_tier_energy = source_final, donor_iso3_energy = donor_iso3) %>%
   distinct(iso3, sex, age_group, .keep_all = TRUE)
 
 # 4) Join shapes to means (ensures UNIQUE keys)
@@ -822,5 +1002,5 @@ stopifnot(nrow(final_calorie_distributions_wide) == nrow(wide_kcal))
 
 # 7) Save
 saveRDS(final_calorie_distributions_wide, file = "./output/final_calorie_distributions_wide.rds")
-cat("✅ Saved final_calorie_distributions_wide.rds with scenario-invariant shapes from MEDIUM and unique keys.\n")
+cat("✅ Saved final_calorie_distributions_wide.rds with scenario-invariant shapes (zero-waste donor ranking) and unique keys.\n")
 
