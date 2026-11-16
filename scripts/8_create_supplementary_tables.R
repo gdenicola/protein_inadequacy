@@ -90,8 +90,14 @@ weighted_mean_safe <- function(x, w) {
   weighted.mean(x[ok], w = w[ok])
 }
 
+# Fixed number of decimals for the SI tables: round() alone drops trailing zeros
+# (e.g. 220 next to 211.2). Returns character; NA stays NA.
+fmt_fixed <- function(x, digits) {
+  ifelse(is.na(x), NA_character_, formatC(round(x, digits) + 0, format = "f", digits = digits))
+}
+
 format_percent_string <- function(x, digits = 1) {
-  paste0(round(100 * x, digits), "%")
+  paste0(fmt_fixed(100 * x, digits), "%")
 }
 
 order_world_region_country <- function(df, name_col = "Country / Region") {
@@ -381,12 +387,12 @@ supp_table_1_EAR <- build_requirement_table(
     row_type,
     `Country / Region`,
     `Population (thousands)` = round(population_thousands, 0),
-    `Mean protein intake (% EAR, Low)` = round(mean_pct_Low, 2),
-    `Mean protein intake (% EAR, Central)` = round(mean_pct_Central, 2),
-    `Mean protein intake (% EAR, High)` = round(mean_pct_High, 2),
-    `Protein inadequacy (% , Low)` = round(prevalence_pct_Low, 2),
-    `Protein inadequacy (% , Central)` = round(prevalence_pct_Central, 2),
-    `Protein inadequacy (% , High)` = round(prevalence_pct_High, 2)
+    `Mean protein intake (% EAR, Low)` = fmt_fixed(mean_pct_Low, 2),
+    `Mean protein intake (% EAR, Central)` = fmt_fixed(mean_pct_Central, 2),
+    `Mean protein intake (% EAR, High)` = fmt_fixed(mean_pct_High, 2),
+    `Protein inadequacy (% , Low)` = fmt_fixed(prevalence_pct_Low, 2),
+    `Protein inadequacy (% , Central)` = fmt_fixed(prevalence_pct_Central, 2),
+    `Protein inadequacy (% , High)` = fmt_fixed(prevalence_pct_High, 2)
   ) %>%
   order_world_region_country()
 
@@ -397,7 +403,8 @@ t1_add_file <- file.path("output", "revision", "si_table1_additions.csv")
 if (file.exists(t1_add_file)) {
   t1_add <- read_csv(t1_add_file, show_col_types = FALSE)
   supp_table_1_EAR <- supp_table_1_EAR %>%
-    left_join(t1_add, by = "Country / Region")
+    left_join(t1_add, by = "Country / Region") %>%
+    mutate(across(starts_with("Exact nutriR match"), ~ fmt_fixed(.x, 1)))
 } else {
   message("Note: ", t1_add_file, " not found - run Script 6 before Script 8 to add intervals and matching flags.")
 }
@@ -429,15 +436,15 @@ supp_table_2_OPT <- t2_iaao %>%
     row_type,
     `Country / Region`,
     `Adult population (thousands)` = round(population_thousands, 0),
-    `Below 0.93 g/kg/d (IAAO EAR-type) (%, Low)`     = round(iaao_prevalence_pct_Low, 2),
-    `Below 0.93 g/kg/d (IAAO EAR-type) (%, Central)` = round(iaao_prevalence_pct_Central, 2),
-    `Below 0.93 g/kg/d (IAAO EAR-type) (%, High)`    = round(iaao_prevalence_pct_High, 2),
-    `Below 1.2 g/kg/d target intake (%, Low)`        = round(t12_prevalence_pct_Low, 2),
-    `Below 1.2 g/kg/d target intake (%, Central)`    = round(t12_prevalence_pct_Central, 2),
-    `Below 1.2 g/kg/d target intake (%, High)`       = round(t12_prevalence_pct_High, 2),
-    `Below 1.6 g/kg/d target intake (%, Low)`        = round(t16_prevalence_pct_Low, 2),
-    `Below 1.6 g/kg/d target intake (%, Central)`    = round(t16_prevalence_pct_Central, 2),
-    `Below 1.6 g/kg/d target intake (%, High)`       = round(t16_prevalence_pct_High, 2)
+    `Below 0.93 g/kg/d (IAAO EAR-type) (%, Low)`     = fmt_fixed(iaao_prevalence_pct_Low, 2),
+    `Below 0.93 g/kg/d (IAAO EAR-type) (%, Central)` = fmt_fixed(iaao_prevalence_pct_Central, 2),
+    `Below 0.93 g/kg/d (IAAO EAR-type) (%, High)`    = fmt_fixed(iaao_prevalence_pct_High, 2),
+    `Below 1.2 g/kg/d target intake (%, Low)`        = fmt_fixed(t12_prevalence_pct_Low, 2),
+    `Below 1.2 g/kg/d target intake (%, Central)`    = fmt_fixed(t12_prevalence_pct_Central, 2),
+    `Below 1.2 g/kg/d target intake (%, High)`       = fmt_fixed(t12_prevalence_pct_High, 2),
+    `Below 1.6 g/kg/d target intake (%, Low)`        = fmt_fixed(t16_prevalence_pct_Low, 2),
+    `Below 1.6 g/kg/d target intake (%, Central)`    = fmt_fixed(t16_prevalence_pct_Central, 2),
+    `Below 1.6 g/kg/d target intake (%, High)`       = fmt_fixed(t16_prevalence_pct_High, 2)
   ) %>%
   order_world_region_country()
 
@@ -454,9 +461,9 @@ supp_table_3_QA <- build_prevalence_only_table(
     row_type,
     `Country / Region`,
     `Population (thousands)` = round(population_thousands, 0),
-    `Protein inadequacy (% , Low, QA)` = round(prevalence_pct_Low, 2),
-    `Protein inadequacy (% , Central, QA)` = round(prevalence_pct_Central, 2),
-    `Protein inadequacy (% , High, QA)` = round(prevalence_pct_High, 2)
+    `Protein inadequacy (% , Low, QA)` = fmt_fixed(prevalence_pct_Low, 2),
+    `Protein inadequacy (% , Central, QA)` = fmt_fixed(prevalence_pct_Central, 2),
+    `Protein inadequacy (% , High, QA)` = fmt_fixed(prevalence_pct_High, 2)
   ) %>%
   order_world_region_country()
 
@@ -518,7 +525,7 @@ supp_table_4_ASF <- bind_rows(asf_world, asf_region, asf_country) %>%
   transmute(
     row_type,
     `Country / Region`,
-    `Total dietary protein (g/day)` = round(total_protein, 1),
+    `Total dietary protein (g/day)` = fmt_fixed(total_protein, 1),
     `Protein from animal-source foods` = format_percent_string(prop_asf, digits = 1)
   ) %>%
   order_world_region_country()
@@ -640,17 +647,17 @@ supp_table_5_EER_counterfactual <- bind_rows(
     `Country / Region`,
     `Population (thousands)` = round(population_thousands, 0),
 
-    `Mean protein intake (g/day, Total)` = round(mean_protein_g_day_Total, 1),
-    `Mean protein intake (g/day, Female)` = round(mean_protein_g_day_Female, 1),
-    `Mean protein intake (g/day, Male)` = round(mean_protein_g_day_Male, 1),
+    `Mean protein intake (g/day, Total)` = fmt_fixed(mean_protein_g_day_Total, 1),
+    `Mean protein intake (g/day, Female)` = fmt_fixed(mean_protein_g_day_Female, 1),
+    `Mean protein intake (g/day, Male)` = fmt_fixed(mean_protein_g_day_Male, 1),
 
-    `Mean protein intake (% EAR, Total)` = round(mean_pct_EAR_Total, 1),
-    `Mean protein intake (% EAR, Female)` = round(mean_pct_EAR_Female, 1),
-    `Mean protein intake (% EAR, Male)` = round(mean_pct_EAR_Male, 1),
+    `Mean protein intake (% EAR, Total)` = fmt_fixed(mean_pct_EAR_Total, 1),
+    `Mean protein intake (% EAR, Female)` = fmt_fixed(mean_pct_EAR_Female, 1),
+    `Mean protein intake (% EAR, Male)` = fmt_fixed(mean_pct_EAR_Male, 1),
 
-    `Mean protein intake (% RDA, Total)` = round(mean_pct_RDA_Total, 1),
-    `Mean protein intake (% RDA, Female)` = round(mean_pct_RDA_Female, 1),
-    `Mean protein intake (% RDA, Male)` = round(mean_pct_RDA_Male, 1)
+    `Mean protein intake (% RDA, Total)` = fmt_fixed(mean_pct_RDA_Total, 1),
+    `Mean protein intake (% RDA, Female)` = fmt_fixed(mean_pct_RDA_Female, 1),
+    `Mean protein intake (% RDA, Male)` = fmt_fixed(mean_pct_RDA_Male, 1)
   ) %>%
   order_world_region_country()
 

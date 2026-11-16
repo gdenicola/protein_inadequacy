@@ -594,13 +594,14 @@ country_central <- dat %>%
 protein_exceeds_energy <- country_central %>%
   filter(!is.na(ratio), ratio > 1.05) %>%
   left_join(mc_country %>% filter(scenario == "central", metric == "EAR") %>% select(iso3, q025, q975), by = "iso3") %>%
+  arrange(desc(round(ratio, 2))) %>%
+  # fixed decimals (character), so that trailing zeros are kept in the SI table
   transmute(country, region,
-            `Protein inadequacy (%)` = round(100 * protein_inadequacy, 1),
+            `Protein inadequacy (%)` = sprintf("%.1f", round(100 * protein_inadequacy, 1)),
             `Protein inadequacy 95% UI` = sprintf("%.1f-%.1f", 100 * q025, 100 * q975),
-            `Energy inadequacy (%)` = round(100 * energy_inadequacy, 1),
-            `Ratio protein / energy` = round(ratio, 2),
-            `Protein from animal-source foods (%)` = round(100 * asf_share, 1)) %>%
-  arrange(desc(`Ratio protein / energy`))
+            `Energy inadequacy (%)` = sprintf("%.1f", round(100 * energy_inadequacy, 1)),
+            `Ratio protein / energy` = sprintf("%.2f", round(ratio, 2)),
+            `Protein from animal-source foods (%)` = sprintf("%.1f", round(100 * asf_share, 1)))
 write_csv(protein_exceeds_energy, file.path(out_dir, "si_protein_exceeds_energy.csv"))
 
 # ==============================================================

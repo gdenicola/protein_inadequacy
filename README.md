@@ -37,7 +37,7 @@ source("scripts/8_create_supplementary_tables.R")
 source("scripts/9_dataverse_tables.R")
 ```
 
-Scripts 1-5 set the working directory with `rstudioapi`, so run them from RStudio (or set the working directory to the repository root and remove the `setwd()` lines). Script 3 downloads GDP data from the World Bank (`WDI` package) and needs an internet connection. Script 6 must run before Scripts 7 and 8, which read its Monte Carlo output.
+Scripts 1-5 set the working directory with `rstudioapi`, so run them from RStudio (or set the working directory to the repository root and remove the `setwd()` lines). Script 3 downloads GDP data from the World Bank (`WDI` package) on its first run, which needs an internet connection, and saves it as `data/WDI_gdp_per_capita_ppp_2018.csv`; later runs read that file. Script 6 must run before Scripts 7 and 8, which read its Monte Carlo output.
 
 ## Input data
 

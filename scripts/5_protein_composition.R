@@ -471,6 +471,9 @@ protein_props <- protein_totals %>%
 
 
 
+# Revision (co-author round): Palestinian Territories excluded, as in Script 1
+protein_props <- protein_props %>% filter(iso3 != "PSE")
+
 # Save ASF / seafood protein proportions for downstream figures, tables, and exports
 saveRDS(protein_props, "./output/protein_asf_props.rds")
 

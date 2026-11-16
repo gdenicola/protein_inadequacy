@@ -34,6 +34,11 @@ protein_nutriR <- bind_rows(
 # Step 2: Load GDD 2018 protein data (v23 = total protein intake)
 protein_gdd <- read_csv("./data/GDD_FinalEstimates_01102022/Country-level estimates/v23_cnty.csv")
 
+# Revision (co-author round): exclude the Palestinian Territories, whose GDD
+# protein estimates imply that over half of dietary energy comes from protein
+# (implausible input). All downstream scripts inherit this country list.
+protein_gdd <- protein_gdd %>% filter(iso3 != "PSE")
+
 # Step 3: Filter to national-level rows and add sex label
 protein_gdd_natl <- protein_gdd %>%
   filter(year == 2018, edu == 999, urban == 999, age != 999, female != 999) %>%

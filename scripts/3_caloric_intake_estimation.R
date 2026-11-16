@@ -44,7 +44,15 @@ cat("--- Master list defined. Total countries required for analysis:", nrow(all_
 library(WDI)
 
 # --- Download raw GDP data ---
-gdp_data_raw <- WDI(indicator = "NY.GDP.PCAP.PP.CD", start = 2018, end = 2018, extra = TRUE)
+# The download is saved in data/ the first time, and later runs (also offline)
+# read that file, so every run uses the same GDP values. Delete the file to re-download.
+gdp_cache <- "./data/WDI_gdp_per_capita_ppp_2018.csv"
+if (file.exists(gdp_cache)) {
+  gdp_data_raw <- readr::read_csv(gdp_cache, show_col_types = FALSE)
+} else {
+  gdp_data_raw <- WDI(indicator = "NY.GDP.PCAP.PP.CD", start = 2018, end = 2018, extra = TRUE)
+  readr::write_csv(gdp_data_raw, gdp_cache)
+}
 
 # --- Clean the data ---
 # This will result in a dataframe that is MISSING Taiwan, which is what we expect now.

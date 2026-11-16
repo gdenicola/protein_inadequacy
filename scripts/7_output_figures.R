@@ -428,7 +428,7 @@ p_fig1b <- ggplot(fig1b_plot_df, aes(x = region_WB, y = country_mean_pct_EAR, fi
   ) +
   geom_hline(yintercept = 100, linetype = "dashed", color = "grey45", linewidth = 0.42) +
   scale_fill_manual(values = sex_pal, drop = FALSE) +
-  coord_cartesian(ylim = c(0, 430)) +
+  coord_cartesian(ylim = c(0, 500)) +
   labs(
     tag = "(b)",
     title = "Country-level mean protein intake by region and sex",
@@ -439,7 +439,7 @@ p_fig1b <- ggplot(fig1b_plot_df, aes(x = region_WB, y = country_mean_pct_EAR, fi
   fig_theme(center_title = TRUE) +
   theme(
     axis.text.x = element_text(angle = 32, hjust = 1, vjust = 1, size = 6.7),
-    legend.position = c(0.62, 0.96),
+    legend.position = c(0.40, 0.96),
     plot.tag.position = c(0.055, 0.985),
     legend.justification = c(0.5, 1),
     legend.direction = "horizontal",
