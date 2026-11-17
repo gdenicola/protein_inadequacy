@@ -5,7 +5,7 @@ This repository contains the analysis code for the manuscript:
 **Model-based estimates of inadequate protein intake worldwide** *(under review)*  
 Giacomo De Nicola, Ty Beal, Stella Nordhagen, Stuart M. Phillips, Simone Passarelli, Christopher D. Golden
 
-The analysis estimates the prevalence of inadequate protein intake across 185 countries in 2018, disaggregated by sex and age group. It combines modeled dietary intake data, protein requirement thresholds, caloric intake scenarios, intake distribution parameters, food supply data, body-weight data, and population estimates to reconstruct country-sex-age-specific protein and energy intake distributions. All estimates are model-based: they rely on reconstructed rather than observed intake distributions.
+The analysis estimates the prevalence of inadequate protein intake across 184 countries in 2018, disaggregated by sex and age group. It combines modeled dietary intake data, protein requirement thresholds, caloric intake scenarios, intake distribution parameters, food supply data, body-weight data, and population estimates to reconstruct country-sex-age-specific protein and energy intake distributions. All estimates are model-based: they rely on reconstructed rather than observed intake distributions.
 
 ## Overview
 
@@ -17,7 +17,7 @@ First, we estimate mean protein intake under a deterministic **energy-adequate c
 
 Second, we estimate protein and energy inadequacy under three **realistic caloric intake scenarios**, where country-level energy intake is derived from FAO Food Balance Sheet energy supply adjusted for modeled downstream food waste. The central scenario is calibrated to 8% global energy inadequacy (FAO prevalence of undernourishment for 2018), the low-calorie scenario to 16%, and the high-calorie scenario assumes no downstream waste.
 
-Additional analyses: a Monte Carlo uncertainty analysis, the full probability approach, alternative distribution families, a donor-country bootstrap, an exploratory analysis of higher intake levels proposed for adults (0.93, 1.2 and 1.6 g/kg/d), a protein-quality sensitivity analysis, and protein-to-energy ratios.
+Additional analyses: a Monte Carlo uncertainty analysis, the full probability approach, alternative distribution families, a donor-country bootstrap, an exploratory analysis of higher intake levels proposed for adults (0.93, 1.2 and 1.6 g/kg/d), an exploratory low-ASF scenario for protein quality, and protein-to-energy ratios.
 
 ## Quick start
 
@@ -77,7 +77,7 @@ All external datasets remain subject to their own licenses and terms of use.
 | `2_protein_inadequacy_under_optimal_caloric_intake.R` | Protein energy shares; energy-adequate counterfactual (energy = EER) | `script2_final_results.rds` |
 | `3_caloric_intake_estimation.R` | Energy supply, GDP-linked waste functions calibrated to 8% and 16% global energy inadequacy, disaggregation to strata, nutriR energy distributions (donor countries ranked on energy supply before waste; the same shapes in all scenarios) | `final_calorie_distributions_wide.rds`, `revision/calibration_parameters.csv`, `revision/imputation_log_country_inputs_script3.csv`, `revision/donor_inputs_energy.rds` |
 | `4_caloric_and_protein_inadequacy_calculation_and_overlap.R` | MDER, protein and energy inadequacy (central scenario), calibration checks | `final_analysis_with_all_inadequacy.rds`, `revision/script4_revision_checks.csv` |
-| `5_protein_composition.R` | Share of protein from animal-source foods; quality-adjusted EAR (sensitivity analysis) | `dat_quality.rds`, `protein_asf_props.rds` |
+| `5_protein_composition.R` | Share of protein from animal-source foods; adjusted EAR for the exploratory low-ASF scenario (Supplementary Note 1) | `dat_quality.rds`, `protein_asf_props.rds` |
 | `6_revision_uncertainty_and_sensitivity.R` | Monte Carlo uncertainty intervals, probability approach, distribution family, quality grid, higher intake levels, matching tiers, donor bootstrap, P/E ratios, imputation log | `revision/*.csv`, `revision/revision_tables.xlsx` |
 | `7_output_figures.R` | Main figures | `main_figures_clean/` |
 | `8_create_supplementary_tables.R` | Supplementary tables | `supplementary_tables_clean/` |
@@ -101,7 +101,7 @@ Then run Scripts 6, 7 and 8. Script 6 skips the donor bootstrap if the donor inp
 
 R packages: `dplyr`, `tidyr`, `readr`, `readxl`, `purrr`, `tibble`, `stringr`, `rlang`, `ggplot2`, `scales`, `patchwork`, `viridis`, `sf`, `rnaturalearth`, `rnaturalearthdata`, `countrycode`, `WDI`, `writexl`, `rstudioapi`, plus `nutriR` (https://github.com/cfree14/nutriR) and `wpp2024` (https://github.com/PPgp/wpp2024), which are installed from GitHub. The results use nutriR commit 49977ef; later versions add countries and change the donor pool, so install that commit: `remotes::install_github("cfree14/nutriR@49977ef35e08c5e846c52fcc847487a9cc8f35e8")`.
 
-The package versions used for the published results are listed in `session_info.txt`.
+The package versions used for the published results are listed in `session_info.txt`. The analysis was run on macOS 26.6 (Apple silicon) with R 4.4.3; no non-standard hardware is needed. Installing the packages takes a few minutes, and running Scripts 1-9 takes about 5 minutes on a standard laptop.
 
 ## Archiving
 
