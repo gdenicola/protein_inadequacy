@@ -89,13 +89,12 @@ The main analytical dataset is `output/dat_quality.rds`: one row per country-sex
 
 ## Reproducing the figures and tables without the raw data
 
-The processed datasets needed for Scripts 6, 7 and 8 will be archived with the stratum-level estimates in the Harvard Dataverse (doi:10.7910/DVN/EDULN9) at publication:
+The repository includes the processed stratum-level dataset (`output/dat_quality.rds`) and the protein-source shares (`output/protein_asf_props.rds`), so Scripts 6, 7 and 8 can be run directly after cloning to reproduce the figures and tables (a few minutes on a standard laptop). Two further sets of files will be archived with the stratum-level estimates in the Harvard Dataverse (doi:10.7910/DVN/EDULN9) at publication:
 
-- `dat_quality.rds` and `protein_asf_props.rds` (place in `output/`)
 - `donor_inputs_protein.rds` and `donor_inputs_energy.rds`, written by Scripts 1 and 3 and needed for the donor bootstrap (place in `output/revision/`)
 - `imputation_log_country_inputs_script3.csv`, `imputation_log_mder.csv` and `imputation_log_weights.csv`, needed for the table of imputed inputs (place in `output/revision/`)
 
-Then run Scripts 6, 7 and 8. Script 6 skips the donor bootstrap if the donor input files are missing.
+Without them, Script 6 skips the donor bootstrap and the table of imputed inputs is incomplete.
 
 ## Software requirements
 
